@@ -3,6 +3,9 @@ core/
 core
 /log
 /build
+__pycache__/
+*.pyc
+
 
 # Un-ignore necessary parent directories
 !src/
