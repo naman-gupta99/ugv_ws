@@ -59,6 +59,13 @@ def generate_launch_description():
         )
     )
 
+    # Include camera launch file
+    camera_bringup_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory('ugv_vision'), 'launch', 'camera.launch.py')
+        )
+    )
+
     # Define the base node with parameters
     base_node = Node(
         package='ugv_base_node',
@@ -76,5 +83,6 @@ def generate_launch_description():
         driver_node,
         laser_bringup_launch,
         rf2o_laser_odometry_launch,
+        camera_bringup_launch,
         base_node
     ])

@@ -1,0 +1,23 @@
+install/
+core/
+core
+/log
+/build
+__pycache__/
+*.pyc
+
+
+# Un-ignore necessary parent directories
+!src/
+!src/ugv_else/
+!src/ugv_else/ldlidar/
+!src/ugv_else/ldlidar/ldlidar_driver/
+!src/ugv_else/ldlidar/ldlidar_driver/include/
+!src/ugv_else/ldlidar/ldlidar_driver/include/core/
+!src/ugv_else/ldlidar/ldlidar_driver/src/
+!src/ugv_else/ldlidar/ldlidar_driver/src/core/
+
+# Specific files to track
+!src/ugv_else/ldlidar/ldlidar_driver/include/core/ldlidar_datatype.h
+!src/ugv_else/ldlidar/ldlidar_driver/include/core/ldlidar_driver.h
+!src/ugv_else/ldlidar/ldlidar_driver/src/core/ldlidar_driver.cpp

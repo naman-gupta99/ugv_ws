@@ -10,7 +10,7 @@ from time import sleep
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import Joy
+from sensor_msgs.msg import JointState, Joy
 from std_msgs.msg import Int32, Bool
 import pygame
 
@@ -39,16 +39,20 @@ class JoyTeleop(Node):
 		self.user_name = getpass.getuser()
 		self.linear_Gear = 1
 		self.angular_Gear = 1
+		self.x_rad = 0
+		self.y_rad = 0
 		
 		#create pub
 		self.pub_cmdVel = self.create_publisher(Twist,'cmd_vel',  10)
+		self.pub_cmdJoint = self.create_publisher(JointState, 'ugv/joint_states',  10)
 		self.pub_JoyState = self.create_publisher(Bool,"JoyState",  10)
+		self.pub_imgCapture = self.create_publisher(Bool,"image_capture",  10)
 		
 		#create sub
 		self.sub_Joy = self.create_subscription(Joy,'joy', self.buttonCallback,10)
 		
 		#declare parameter and get the value
-		self.declare_parameter('xspeed_limit',0.5)
+		self.declare_parameter('xspeed_limit',0.65)
 		self.declare_parameter('yspeed_limit',0.5)
 		self.declare_parameter('angular_speed_limit',1.0)
 		self.xspeed_limit = self.get_parameter('xspeed_limit').get_parameter_value().double_value
@@ -57,8 +61,8 @@ class JoyTeleop(Node):
 		joysticks = get_joystick_names()
 		self.joysticks = joysticks[0] if len(joysticks) != 0 else "no"
 		self.switch_dict = {
-			"Xbox 360 Controller": [9,10,3],
-			"SHANWAN Android Gamepad": [13,14,2],
+			"Xbox 360 Controller": [9,10,3,4],
+			"SHANWAN Android Gamepad": [13,14,2,None],
 		}
 
 	def buttonCallback(self,joy_data):
@@ -68,6 +72,7 @@ class JoyTeleop(Node):
 		else: self.user_pc(joy_data)
     
 	def user_jetson(self, joy_data):
+		# self.get_logger().info(f"joy_data: {joy_data}")
 			#linear Gear control
 		if joy_data.buttons[self.switch_dict[self.joysticks][0]] == 1:
 			if self.linear_Gear == 1.0: self.linear_Gear = 1.0 / 3
@@ -79,6 +84,9 @@ class JoyTeleop(Node):
 			elif self.angular_Gear == 1.0 / 4: self.angular_Gear = 1.0 / 2
 			elif self.angular_Gear == 1.0 / 2: self.angular_Gear = 3.0 / 4
 			elif self.angular_Gear == 3.0 / 4: self.angular_Gear = 1.0
+		if joy_data.buttons[self.switch_dict[self.joysticks][3]] == 1:
+			self.get_logger().info("image capture")
+			self.pub_imgCapture.publish(Bool(data=True))
 		xlinear_speed = self.filter_data(joy_data.axes[1]) * self.xspeed_limit * self.linear_Gear
 			#ylinear_speed = self.filter_data(joy_data.axes[2]) * self.yspeed_limit * self.linear_Gear
 		ylinear_speed = self.filter_data(joy_data.axes[0]) * self.yspeed_limit * self.linear_Gear
@@ -93,12 +101,34 @@ class JoyTeleop(Node):
 		twist.linear.x = xlinear_speed
 		twist.linear.y = ylinear_speed
 		twist.angular.z = angular_speed
+  
+		self.x_rad += (joy_data.axes[6] * 0.017453)  # 0.017453 = π/180
+		self.y_rad += (joy_data.axes[7] * 0.017453)
+		
+		self.x_rad = min(max(self.x_rad, -3.14159), 3.14159)  # -π to π radians
+		self.y_rad = min(max(self.y_rad, -0.785398), 1.5708)  # -π/4 to π/2 radians
+  
+		jointState = JointState()
+		# Set proper header information
+		jointState.header.frame_id = "ugv_joint_state"
+		jointState.header.stamp = self.get_clock().now().to_msg()
+		jointState.name = [
+			'left_up_wheel_link_joint', 
+			'left_down_wheel_link_joint', 
+			'right_up_wheel_link_joint', 
+			'right_down_wheel_link_joint', 
+			'pt_base_link_to_pt_link1', 
+			'pt_link1_to_pt_link2'
+		]
+		jointState.position = [0.0, 0.0, 0.0, 0.0, self.x_rad, self.y_rad]
+  
 		if self.Joy_active == True:
 			print("joy control now")
 			self.pub_cmdVel.publish(twist)
+			self.pub_cmdJoint.publish(jointState)
         
 	def user_pc(self, joy_data):
-			# Gear control
+        # Gear control
 		if joy_data.buttons[self.switch_dict[self.joysticks][0]] == 1:
 			if self.linear_Gear == 1.0: self.linear_Gear = 1.0 / 3
 			elif self.linear_Gear == 1.0 / 3: self.linear_Gear = 2.0 / 3
@@ -121,7 +151,31 @@ class JoyTeleop(Node):
 		twist.linear.x = xlinear_speed
 		twist.linear.y = ylinear_speed
 		twist.angular.z = angular_speed
+		
+		# Add joint state handling similar to user_jetson
+		self.x_rad += (joy_data.axes[6] if len(joy_data.axes) > 6 else 0) * 0.017453
+		self.y_rad += (joy_data.axes[7] if len(joy_data.axes) > 7 else 0) * 0.017453
+		
+		self.x_rad = min(max(self.x_rad, -3.14159), 3.14159)  # -π to π radians
+		self.y_rad = min(max(self.y_rad, -0.785398), 1.5708)  # -π/4 to π/2 radians
+  
+		jointState = JointState()
+		# Set proper header information
+		jointState.header.frame_id = "ugv_joint_state"
+		jointState.header.stamp = self.get_clock().now().to_msg()
+		jointState.name = [
+			'left_up_wheel_link_joint', 
+			'left_down_wheel_link_joint', 
+			'right_up_wheel_link_joint', 
+			'right_down_wheel_link_joint', 
+			'pt_base_link_to_pt_link1', 
+			'pt_link1_to_pt_link2'
+		]
+		jointState.position = [0.0, 0.0, 0.0, 0.0, self.x_rad, self.y_rad]
+		
 		self.pub_cmdVel.publish(twist)
+		if jointState.position[4] != 0 or jointState.position[5] != 0:
+			self.pub_cmdJoint.publish(jointState)
         
 	def filter_data(self, value):
 		if abs(value) < 0.2: value = 0
@@ -132,4 +186,4 @@ def main():
 	joy_ctrl = JoyTeleop('joy_ctrl')
 	rclpy.spin(joy_ctrl)	
 	
-main()		
+main()
