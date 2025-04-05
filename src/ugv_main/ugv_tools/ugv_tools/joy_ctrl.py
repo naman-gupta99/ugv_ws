@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-import os
-import time
 import getpass
-import threading
-from time import sleep
+import math
 
 import rclpy
 from rclpy.node import Node
@@ -93,6 +90,29 @@ class JoyTeleop(Node):
 		twist.linear.x = xlinear_speed
 		twist.linear.y = ylinear_speed
 		twist.angular.z = angular_speed
+  
+		self.x_rad += (joy_data.axes[6] * math.pi/180)  # 0.017453 = π/180
+		self.y_rad += (joy_data.axes[7] * math.pi/180)
+		
+		self.x_rad = min(max(self.x_rad, -math.pi), math.pi)  # -π to π radians
+		self.y_rad = min(max(self.y_rad, -math.pi/4), math.pi/2)  # -π/4 to π/2 radians
+  
+		jointState = JointState()
+		# Set proper header information
+		jointState.header.frame_id = "ugv_joint_state"
+		jointState.header.stamp = self.get_clock().now().to_msg()
+		jointState.name = [
+			'left_up_wheel_link_joint', 
+			'left_down_wheel_link_joint', 
+			'right_up_wheel_link_joint', 
+			'right_down_wheel_link_joint', 
+			'pt_base_link_to_pt_link1', 
+			'pt_link1_to_pt_link2'
+		]
+		jointState.position = [0.0, 0.0, 0.0, 0.0, self.x_rad, self.y_rad]
+
+		self.get_logger().info("x_rad: %s, y_rad: %s" % (self.x_rad, self.y_rad))
+
 		if self.Joy_active == True:
 			print("joy control now")
 			self.pub_cmdVel.publish(twist)
@@ -121,6 +141,28 @@ class JoyTeleop(Node):
 		twist.linear.x = xlinear_speed
 		twist.linear.y = ylinear_speed
 		twist.angular.z = angular_speed
+		
+		# Add joint state handling similar to user_jetson
+		self.x_rad += (joy_data.axes[6] if len(joy_data.axes) > 6 else 0) * math.pi/180
+		self.y_rad += (joy_data.axes[7] if len(joy_data.axes) > 7 else 0) * math.pi/180
+		
+		self.x_rad = min(max(self.x_rad, -math.pi), math.pi)  # -π to π radians
+		self.y_rad = min(max(self.y_rad, -math.pi/4), math.pi/2)  # -π/4 to π/2 radians
+  
+		jointState = JointState()
+		# Set proper header information
+		jointState.header.frame_id = "ugv_joint_state"
+		jointState.header.stamp = self.get_clock().now().to_msg()
+		jointState.name = [
+			'left_up_wheel_link_joint', 
+			'left_down_wheel_link_joint', 
+			'right_up_wheel_link_joint', 
+			'right_down_wheel_link_joint', 
+			'pt_base_link_to_pt_link1', 
+			'pt_link1_to_pt_link2'
+		]
+		jointState.position = [0.0, 0.0, 0.0, 0.0, self.x_rad, self.y_rad]
+		
 		self.pub_cmdVel.publish(twist)
         
 	def filter_data(self, value):
