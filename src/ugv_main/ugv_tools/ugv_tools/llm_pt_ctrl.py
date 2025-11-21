@@ -11,6 +11,9 @@ import threading
 import queue
 import time
 
+from agent.audit_toolset import audit_state_instance
+from agent.validation_react_agent import ValidationReactAgent
+
 class LlmPtCtrl(Node):
     def __init__(self, name):
         super().__init__(name)
@@ -20,6 +23,8 @@ class LlmPtCtrl(Node):
 
         self.curr = 0
         self.coord_queue = queue.Queue()
+        
+        audit_state_instance.q = self.coord_queue
 
         self.pub_cmdJoint = self.create_publisher(
             JointState, 'ugv/joint_states', 10
@@ -29,7 +34,7 @@ class LlmPtCtrl(Node):
         self.x_rad = 0.0
         self.y_rad = 0.0
         
-        self.get_initial_values()
+        # self.get_initial_values()
 
         self.bridge = CvBridge()
         self.curr_image_raw = None
@@ -44,6 +49,8 @@ class LlmPtCtrl(Node):
         # Time tracking for delays
         self.coords_processed_time = 0
         self.delay_duration = 2.0  # 2 second delay
+        
+        ValidationReactAgent().execute()
         
     def get_initial_values(self):
         """Get initial x_rad and y_rad values in a separate thread"""
@@ -79,12 +86,6 @@ class LlmPtCtrl(Node):
         else:
             self.get_logger().warn("No image_raw received yet, cannot save image.")
             return
-
-        # Request coordinates if we're not already waiting
-        if not self.waiting_for_coords and current_time - self.coords_processed_time >= self.delay_duration:
-            self.waiting_for_coords = True
-            # Signal the input thread to get coordinates
-            self.input_queue.put("get_coords")
 
         # Try to get coordinates from the queue (non-blocking)
         try:
