@@ -29,7 +29,7 @@ class LlmPtCtrl(Node):
         TODO: There should either be a feedback mechanism confirming when the actuation is complete,
         or a delay based on the difference in angles and known actuation speed.
         """
-        time.sleep(4.0)
+        time.sleep(2.0)
         
         self.capture_image()
 
