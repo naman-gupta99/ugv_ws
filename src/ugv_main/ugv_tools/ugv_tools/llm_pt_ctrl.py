@@ -26,6 +26,7 @@ class LlmPtCtrl(Node):
 
         # Block until the publisher loop confirms the joint state broadcast.
         waited = 0.0
+        self.publish_joint_state()
         while not self._publish_event.wait(timeout=0.5):
             waited += 0.5
             if waited >= 2.0:
@@ -70,7 +71,7 @@ class LlmPtCtrl(Node):
         self._publish_event.set()
 
         # Timer to periodically call publish_joint_state
-        self.timer = self.create_timer(0.1, self.publish_joint_state)
+        # self.timer = self.create_timer(0.1, self.publish_joint_state)
 
         # Agent Controller
         audit_state_instance.update_rover_state_func = self.set_new_angles
@@ -152,7 +153,6 @@ class LlmPtCtrl(Node):
             self.y_rad = 0.0
             self.capture_image = False
         self.publish_joint_state()
-        self._publish_event.set()
         self.get_logger().info("Shutting down LlmPtCtrl node.")
 
 
