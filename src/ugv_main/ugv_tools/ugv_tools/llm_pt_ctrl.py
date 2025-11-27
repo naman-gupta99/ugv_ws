@@ -18,22 +18,11 @@ import os
 
 class LlmPtCtrl(Node):
 
-    def set_new_angles(self, x_rad, y_rad):
-        self._publish_event.clear()
-        with self._angle_lock:
-            self.x_rad = x_rad
-            self.y_rad = y_rad
-
-        # Block until the publisher loop confirms the joint state broadcast.
-        waited = 0.0
+    def set_new_angles(self, dx_rad, dy_rad):
+        self.x_rad += dx_rad
+        self.y_rad += dy_rad
+            
         self.publish_joint_state()
-        while not self._publish_event.wait(timeout=0.5):
-            waited += 0.5
-            if waited >= 2.0:
-                self.get_logger().warn(
-                    "Still waiting for joint state publish after angle update."
-                )
-                waited = 0.0
 
         # Actuation Delay
         """
@@ -66,9 +55,6 @@ class LlmPtCtrl(Node):
         self.bridge = CvBridge()
         self.curr_image_raw = None
         self.image_lock = threading.Lock()
-        self._angle_lock = threading.Lock()
-        self._publish_event = threading.Event()
-        self._publish_event.set()
 
         # Timer to periodically call publish_joint_state
         # self.timer = self.create_timer(0.1, self.publish_joint_state)
@@ -114,10 +100,9 @@ class LlmPtCtrl(Node):
     def publish_joint_state(self):
         try:
 
-            with self._angle_lock:
-                x_rad = self.x_rad
-                y_rad = self.y_rad
-                print(f"Publishing joint state with x_rad: {x_rad}, y_rad: {y_rad}")
+            x_rad = self.x_rad
+            y_rad = self.y_rad
+            print(f"Publishing joint state with x_rad: {x_rad}, y_rad: {y_rad}")
 
             # Always publish the joint state with current values
             joint_state = JointState()
@@ -138,8 +123,6 @@ class LlmPtCtrl(Node):
             self.pub_cmdJoint.publish(joint_state)
         except Exception as exc:
             self.get_logger().error(f"Failed to publish joint state: {exc}")
-        finally:
-            self._publish_event.set()
 
     def _run_validation_agent(self):
         try:
