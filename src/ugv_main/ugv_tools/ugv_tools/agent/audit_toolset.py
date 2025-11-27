@@ -1,6 +1,8 @@
 from langchain_core.tools import tool
 from typing import Any, Dict
 
+from .utilities.coord_convert import convert_coordinates_to_angles
+
 class State:
 
     def __generate_goal_coordinates(self):
@@ -15,7 +17,7 @@ class State:
         self.target_area = {"x_min": -3, "x_max": 2, "y_min": -2, "y_max": 2}
         self.remaining_coordinates = self.__generate_goal_coordinates()
         self.path = [{"x": 0, "y": 0}]
-        self.q = None
+        self.update_rover_state_func = None
 
     def move_ahead(self):
         self.current_coordinates["y"] += 1
@@ -36,8 +38,12 @@ class State:
     def _update_coordinates(self):
         self.path.append(self.current_coordinates.copy())
         
-        if self.q is not None:
-            self.q.put((self.current_coordinates["x"], self.current_coordinates["y"]))
+        dx_rad, dy_rad = convert_coordinates_to_angles(self.path[-2]["x"], self.path[-2]["y"],
+                                                       self.current_coordinates["x"], self.current_coordinates["y"])
+        if self.update_rover_state_func:
+            self.update_rover_state_func(dx_rad, dy_rad)
+        else:
+            print("[audit_toolset] Warning: update_rover_state_func not set.")
 
         if (self.current_coordinates["x"], self.current_coordinates["y"]) in self.remaining_coordinates:
             self.remaining_coordinates.remove((self.current_coordinates["x"], self.current_coordinates["y"]))

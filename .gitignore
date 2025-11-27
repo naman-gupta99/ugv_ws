@@ -21,3 +21,5 @@ __pycache__/
 !src/ugv_else/ldlidar/ldlidar_driver/include/core/ldlidar_datatype.h
 !src/ugv_else/ldlidar/ldlidar_driver/include/core/ldlidar_driver.h
 !src/ugv_else/ldlidar/ldlidar_driver/src/core/ldlidar_driver.cpp
+
+/venv

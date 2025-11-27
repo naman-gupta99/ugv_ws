@@ -16,8 +16,8 @@ from langchain_core.messages import (
 )
 from typing import TypedDict, Annotated, Sequence
 
-from agent.audit_toolset import *
-from agent.models import Models
+from .audit_toolset import *
+from .models import Models
 
 def system_message(content: str, flag: bool = False) -> BaseMessage:
     if flag:
