@@ -14,6 +14,9 @@ import time
 from .agent.audit_toolset import audit_state_instance
 from .agent.validation_react_agent import ValidationReactAgent
 import os
+import pathlib
+import tempfile
+import traceback
 
 
 class LlmPtCtrl(Node):
@@ -56,6 +59,19 @@ class LlmPtCtrl(Node):
         self.curr_image_raw = None
         self.image_lock = threading.Lock()
 
+        # Capture directory (configurable via env var). Prefer mounted workspace if present,
+        # otherwise fall back to user's home directory under ~/ugv_ws/captures.
+        env_dir = os.environ.get("UGV_CAPTURE_DIR")
+        default_workspace_dir = "/home/ws/ugv_ws/captures"
+        home_fallback = os.path.expanduser("~/ugv_ws/captures")
+        if env_dir:
+            self.capture_base_dir = env_dir
+        elif os.path.isdir(os.path.dirname(default_workspace_dir)):
+            # If /home/ws/ugv_ws exists on the system, use it (common for your setup)
+            self.capture_base_dir = default_workspace_dir
+        else:
+            self.capture_base_dir = home_fallback
+
         # Timer to periodically call publish_joint_state
         # self.timer = self.create_timer(0.1, self.publish_joint_state)
 
@@ -82,15 +98,37 @@ class LlmPtCtrl(Node):
 
         if image_to_save is not None:
             date_folder = time.strftime("%Y%m%d%H%M")
-            capture_dir = f"/home/ws/ugv_ws/captures/{date_folder}"
-            os.makedirs(capture_dir, exist_ok=True)
-            cv2.imwrite(
-                f"/home/ws/ugv_ws/captures/{date_folder}/decision{self.curr}.png",
-                image_to_save,
-            )
-            self.get_logger().info(
-                f"Image saved successfully as /{date_folder}/decision{self.curr}.png"
-            )
+            capture_dir = os.path.join(self.capture_base_dir, date_folder)
+            try:
+                # Use pathlib to ensure parent directories are created
+                pathlib.Path(capture_dir).mkdir(parents=True, exist_ok=True)
+                filename = os.path.join(capture_dir, f"decision{self.curr}.png")
+                ok = cv2.imwrite(filename, image_to_save)
+                if ok:
+                    self.get_logger().info(
+                        f"Image saved successfully as {filename}"
+                    )
+                else:
+                    # cv2 can fail silently; log and fallback to temp
+                    raise IOError("cv2.imwrite returned False")
+            except Exception as exc:
+                # Log full traceback to help debugging permission or filesystem issues
+                tb = traceback.format_exc()
+                self.get_logger().error(
+                    f"Failed to save image to {capture_dir}: {exc}\n{tb}"
+                )
+                # Fallback: create a temp directory we can write to
+                try:
+                    tmpdir = tempfile.mkdtemp(prefix="ugv_captures_")
+                    tmpfile = os.path.join(tmpdir, f"decision{self.curr}.png")
+                    cv2.imwrite(tmpfile, image_to_save)
+                    self.get_logger().info(
+                        f"Image saved to fallback location {tmpfile}"
+                    )
+                except Exception as exc2:
+                    self.get_logger().error(
+                        f"Fallback save also failed: {exc2}\n{traceback.format_exc()}"
+                    )
             self.curr += 1
         elif image_to_save is None:
             self.get_logger().warn(
