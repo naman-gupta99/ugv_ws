@@ -15,7 +15,7 @@ class State:
 
     def __init__(self):
         self.current_coordinates = {"x": 0, "y": 0}
-        self.target_area = {"x_min": 3, "x_max": 5, "y_min": -2, "y_max": 2}
+        self.target_area = {"x_min": -2, "x_max": 2, "y_min": 2, "y_max": 4}
         self.remaining_coordinates = self.__generate_goal_coordinates()
         self.path = [{"x": 0, "y": 0}]
         self.update_rover_state_func = None
