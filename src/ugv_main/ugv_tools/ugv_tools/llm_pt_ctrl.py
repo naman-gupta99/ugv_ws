@@ -39,7 +39,7 @@ class LlmPtCtrl(Node):
         TODO: There should either be a feedback mechanism confirming when the actuation is complete,
         or a delay based on the difference in angles and known actuation speed.
         """
-        time.sleep(2.0)
+        time.sleep(4.0)
         
         self.capture_image()
 
@@ -116,6 +116,7 @@ class LlmPtCtrl(Node):
             with self._angle_lock:
                 x_rad = self.x_rad
                 y_rad = self.y_rad
+                print(f"Publishing joint state with x_rad: {x_rad}, y_rad: {y_rad}")
 
             # Always publish the joint state with current values
             joint_state = JointState()
