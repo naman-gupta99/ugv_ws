@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from .utilities.coord_convert import convert_coordinates_to_angles
 
+
 class State:
 
     def __generate_goal_coordinates(self):
@@ -37,16 +38,34 @@ class State:
 
     def _update_coordinates(self):
         self.path.append(self.current_coordinates.copy())
-        
-        dx_rad, dy_rad = convert_coordinates_to_angles(self.path[-2]["x"], self.path[-2]["y"],
-                                                       self.current_coordinates["x"], self.current_coordinates["y"])
+
+        print(f"[audit_toolset] Moving to coordinates: {self.current_coordinates}")
+
+        dx_rad, dy_rad = convert_coordinates_to_angles(
+            self.path[-2]["x"],
+            self.path[-2]["y"],
+            self.current_coordinates["x"],
+            self.current_coordinates["y"],
+        )
         if self.update_rover_state_func:
-            self.update_rover_state_func(dx_rad, dy_rad)
+            try:
+                result = self.update_rover_state_func(dx_rad, dy_rad)
+                if result is False:
+                    print(
+                        "[audit_toolset] Warning: Timed out waiting for rover state update."
+                    )
+            except Exception as exc:
+                print(f"[audit_toolset] Error while updating rover state: {exc}")
         else:
             print("[audit_toolset] Warning: update_rover_state_func not set.")
 
-        if (self.current_coordinates["x"], self.current_coordinates["y"]) in self.remaining_coordinates:
-            self.remaining_coordinates.remove((self.current_coordinates["x"], self.current_coordinates["y"]))
+        if (
+            self.current_coordinates["x"],
+            self.current_coordinates["y"],
+        ) in self.remaining_coordinates:
+            self.remaining_coordinates.remove(
+                (self.current_coordinates["x"], self.current_coordinates["y"])
+            )
 
     def is_mission_complete(self):
         return not self.remaining_coordinates
@@ -67,8 +86,12 @@ class State:
         try:
             # Basic counts
             total_steps = max(0, len(self.path) - 1)
-            start_xy = (self.path[0]["x"], self.path[0]["y"]) if self.path else (None, None)
-            end_xy = (self.path[-1]["x"], self.path[-1]["y"]) if self.path else (None, None)
+            start_xy = (
+                (self.path[0]["x"], self.path[0]["y"]) if self.path else (None, None)
+            )
+            end_xy = (
+                (self.path[-1]["x"], self.path[-1]["y"]) if self.path else (None, None)
+            )
 
             # Target area
             x_min, x_max = self.target_area["x_min"], self.target_area["x_max"]
@@ -79,11 +102,15 @@ class State:
 
             # Unique positions visited and coverage within target
             visited = {(p["x"], p["y"]) for p in self.path}
-            goals = {(x, y) for x in range(x_min, x_max + 1) for y in range(y_min, y_max + 1)}
+            goals = {
+                (x, y) for x in range(x_min, x_max + 1) for y in range(y_min, y_max + 1)
+            }
             visited_goals = visited & goals
             visited_goals_count = len(visited_goals)
             remaining_goals_count = total_goals - visited_goals_count
-            coverage_pct = (visited_goals_count / total_goals * 100.0) if total_goals > 0 else 0.0
+            coverage_pct = (
+                (visited_goals_count / total_goals * 100.0) if total_goals > 0 else 0.0
+            )
 
             # Revisits (steps that returned to an already-visited cell)
             unique_positions_count = len(visited)
@@ -103,26 +130,37 @@ class State:
             # Lower-bound minimal steps to cover all goals starting from start:
             # - Need to reach the rectangle (entry_cost)
             # - Then traverse N cells with a Hamiltonian path: at least (N - 1) moves
-            minimal_required_steps_lb = (total_goals - 1) + entry_cost if total_goals > 0 else 0
+            minimal_required_steps_lb = (
+                (total_goals - 1) + entry_cost if total_goals > 0 else 0
+            )
 
             steps_remaining_lb = max(0, minimal_required_steps_lb - total_steps)
 
             # Print summary
             print(f"Start: {start_xy} | End: {end_xy}")
-            print(f"Target Area: x=[{x_min},{x_max}] y=[{y_min},{y_max}]  (W={width}, H={height}, Goals={total_goals})")
+            print(
+                f"Target Area: x=[{x_min},{x_max}] y=[{y_min},{y_max}]  (W={width}, H={height}, Goals={total_goals})"
+            )
             print(f"Steps taken: {total_steps}")
-            print(f"Unique positions visited: {unique_positions_count}  (Revisits: {revisits})")
-            print(f"Goals visited: {visited_goals_count}/{total_goals}  ({coverage_pct:.2f}%)")
-            print(f"Mission complete: {self.is_mission_complete()}  | Remaining goals: {remaining_goals_count}")
+            print(
+                f"Unique positions visited: {unique_positions_count}  (Revisits: {revisits})"
+            )
+            print(
+                f"Goals visited: {visited_goals_count}/{total_goals}  ({coverage_pct:.2f}%)"
+            )
+            print(
+                f"Mission complete: {self.is_mission_complete()}  | Remaining goals: {remaining_goals_count}"
+            )
             print("-- Optimality Lower-Bound (Manhattan-based) --")
             print(f"Entry cost to reach target rectangle: {entry_cost}")
             print(f"Minimum steps required (lower bound): {minimal_required_steps_lb}")
             print(f"Lower-bound remaining steps to finish: {steps_remaining_lb}")
         except Exception as e:
             print(f"[print_metrics] Error computing metrics: {e}")
-        
+
 
 audit_state_instance = State()
+
 
 @tool
 def move_ahead() -> Dict[str, Any]:
