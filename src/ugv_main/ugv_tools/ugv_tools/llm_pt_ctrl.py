@@ -71,6 +71,7 @@ class LlmPtCtrl(Node):
             cv2.imwrite(f'/home/ws/ugv_ws/captures/{date_folder}/decision{self.curr}.png', image_to_save)
             self.get_logger().info(f"Image saved successfully as /{date_folder}/decision{self.curr}.png")
             self.curr += 1
+            self.capture_image = False
         else:
             self.get_logger().warn("No image_raw received yet, cannot save image.")
             return
