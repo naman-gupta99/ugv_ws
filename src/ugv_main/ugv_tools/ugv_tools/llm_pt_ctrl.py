@@ -6,7 +6,7 @@ from cv_bridge import CvBridge
 import math
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState, Image
+from sensor_msgs.msg import JointState, Image, LaserScan
 import threading
 import queue
 import time
@@ -21,9 +21,9 @@ import traceback
 
 class LlmPtCtrl(Node):
 
-    def set_new_angles(self, dx_rad, dy_rad):
-        self.x_rad += dx_rad
-        self.y_rad += dy_rad
+    def set_new_angles(self, x_rad, y_rad):
+        self.x_rad = x_rad
+        self.y_rad = y_rad
             
         self.publish_joint_state()
 
@@ -33,10 +33,14 @@ class LlmPtCtrl(Node):
         or a delay based on the difference in angles and known actuation speed.
         """
         time.sleep(2.0)
-        
-        self.capture_image()
 
         return True
+    
+    def get_laser_scan(self):
+        return self.curr_lidar_scan
+    
+    def get_current_angles(self):
+        return self.x_rad, self.y_rad
 
     def __init__(self, name):
         super().__init__(name)
@@ -44,6 +48,9 @@ class LlmPtCtrl(Node):
         # Subscriptions
         self.image_raw_sub = self.create_subscription(
             Image, "image_raw", self.image_raw_callback, 10
+        )
+        self.lidar_sub = self.create_subscription(
+            LaserScan, "scan", self.lidar_callback, 10
         )
 
         # Publisher
@@ -58,6 +65,9 @@ class LlmPtCtrl(Node):
         self.bridge = CvBridge()
         self.curr_image_raw = None
         self.image_lock = threading.Lock()
+        
+        # Laser Scan state
+        self.curr_lidar_scan = None
 
         # Capture directory (configurable via env var). Prefer mounted workspace if present,
         # otherwise fall back to user's home directory under ~/ugv_ws/captures.
@@ -77,6 +87,10 @@ class LlmPtCtrl(Node):
 
         # Agent Controller
         audit_state_instance.update_rover_state_func = self.set_new_angles
+        audit_state_instance.get_laser_scan_func = self.get_laser_scan
+        audit_state_instance.get_current_angles_func = self.get_current_angles
+        audit_state_instance.capture_image_func = self.capture_image
+        
         self.validation_agent_thread = threading.Thread(
             target=self._run_validation_agent, daemon=True
         )
@@ -88,6 +102,9 @@ class LlmPtCtrl(Node):
             self.curr_image_raw = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="bgr8"
             )
+            
+    def lidar_callback(self, msg):
+        self.curr_lidar_scan = msg
 
     def capture_image(self):
         # Process image if available
