@@ -31,8 +31,8 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
     y_idx = curr_y_rad * a + mid
     dist_y = laser_scan.ranges[int(y_idx)]
     
-    rad_x = math.atan2(math.tan(curr_x_rad) + (0.5*dx)/dist_x)
-    rad_y = math.atan2(math.tan(curr_y_rad) + (0.5*dy)/dist_y)
+    rad_x = math.atan(math.tan(curr_x_rad) + (0.5*dx)/dist_x)
+    rad_y = math.atan(math.tan(curr_y_rad) + (0.5*dy)/dist_y)
     
     
     return rad_x, rad_y
