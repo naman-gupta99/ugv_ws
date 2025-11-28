@@ -25,9 +25,11 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
     dist_x = laser_scan.ranges[mid]
 
     print(f"[coord_convert] len_scan: {len_scan}")
-    print(f"[coord_convert] Distance at center: {dist_x} at {mid}")
-    print(f"[coord_convert] Distance at 0: {laser_scan.ranges[0]}")
-    print(f"[coord_convert] Distance at 360: {laser_scan.ranges[-1]}")
+    print(f"[coord_convert] Distance: {laser_scan.ranges[mid+2]} at {mid+2}")
+    print(f"[coord_convert] Distance: {laser_scan.ranges[mid+1]} at {mid+1}")
+    print(f"[coord_convert] Distance : {dist_x} at {mid}")
+    print(f"[coord_convert] Distance: {laser_scan.ranges[mid-1]} at {mid-1}")
+    print(f"[coord_convert] Distance: {laser_scan.ranges[mid-2]} at {mid-2}")
 
     a = len_scan / (2 * math.pi)
     y_idx = curr_y_rad * a + mid
