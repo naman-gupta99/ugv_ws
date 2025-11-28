@@ -21,7 +21,7 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
     curr_x_rad, curr_y_rad = current_angles
 
     len_scan = len(laser_scan.ranges)
-    mid = len_scan // 2
+    mid = len_scan // 4
     dist_x = laser_scan.ranges[mid]
 
     print(f"[coord_convert] len_scan: {len_scan}")
