@@ -19,6 +19,9 @@ class State:
         self.remaining_coordinates = self.__generate_goal_coordinates()
         self.path = [{"x": 0, "y": 0}]
         self.update_rover_state_func = None
+        self.get_laser_scan_func = None
+        self.get_current_angles_func = None
+        self.capture_image_func = None
 
     def move_ahead(self):
         self.current_coordinates["y"] += 1
@@ -46,6 +49,8 @@ class State:
             self.path[-2]["y"],
             self.current_coordinates["x"],
             self.current_coordinates["y"],
+            self.get_laser_scan_func(),
+            self.get_current_angles_func(),
         )
         if self.update_rover_state_func:
             try:
@@ -54,6 +59,8 @@ class State:
                     print(
                         "[audit_toolset] Warning: Timed out waiting for rover state update."
                     )
+                    return
+                self.capture_image_func()
             except Exception as exc:
                 print(f"[audit_toolset] Error while updating rover state: {exc}")
         else:

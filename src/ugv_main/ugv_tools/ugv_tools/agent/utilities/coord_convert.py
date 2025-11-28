@@ -1,6 +1,6 @@
 import math
 
-def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y):
+def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, current_angles):
     """
     Convert pixel coordinates to pan-tilt angle differences in radians.
     
@@ -15,8 +15,21 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y):
     """
 
     # Update the radians based on dx and dy and the distance from the image center
-    dx = curr_x - new_x
-    dy = new_y - curr_y
-    dx_rad = -float(dx) * math.pi / 18
-    dy_rad = float(dy) * math.pi / 18
-    return dx_rad, dy_rad
+    
+    curr_x_rad, curr_y_rad = current_angles
+    
+    len_scan = len(laser_scan.ranges)
+    mid = len_scan // 2
+    dist_x = laser_scan.ranges[mid]
+    
+    print(f"[coord_convert] Distance at center: {dist_x} meters")
+    
+    a = len_scan / (2 * math.pi)
+    y_idx = curr_y_rad * a + mid
+    dist_y = laser_scan.ranges[int(y_idx)]
+    
+    rad_x = math.atan2(math.tan(curr_x_rad) + 0.5/dist_x)
+    rad_y = math.atan2(math.tan(curr_y_rad) + 0.5/dist_y)
+    
+    
+    return rad_x, rad_y
