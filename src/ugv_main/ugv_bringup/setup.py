@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'ugv_bringup = ugv_bringup.ugv_bringup:main',
             'ugv_driver = ugv_bringup.ugv_driver:main',
+            'ugv_gazebo_driver = ugv_bringup.ugv_gazebo_driver:main',
         ],
     },
 )
