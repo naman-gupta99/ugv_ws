@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dpkg:*)",
+      "Bash(colcon build:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(source:*)",
+      "Bash(ros2 topic pub:*)",
+      "Bash(ros2 topic echo:*)",
+      "Bash(ros2 topic:*)"
+    ]
+  }
+}
