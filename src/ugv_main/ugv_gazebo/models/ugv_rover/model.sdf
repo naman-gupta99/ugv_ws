@@ -371,6 +371,7 @@
   
   <link name='pt_base_link'>
   <pose relative_to='pt_base_link_joint'>0 0 0 0 -0 0</pose>
+  <gravity>false</gravity>
     <inertial>
       <pose>0 0 0 0 -0 0</pose>
       <mass>0.109518186442022</mass>
@@ -405,6 +406,7 @@
   
   <link name='pt_link1'>      
   <pose relative_to='pt_base_link_to_pt_link1'>0 0 0 0 -0 0</pose>
+  <gravity>false</gravity>
     <inertial>
     <pose>-0.003381 0 0.01761 0 -0 0</pose>
       <mass>0.00710917409663916</mass>
@@ -439,6 +441,7 @@
   
   <link name='pt_link2'>      
         <pose relative_to='pt_link1_to_pt_link2'>0 0 0 0 -0 0</pose>
+        <gravity>false</gravity>
         <inertial>
           <pose>0.023763 0.01126 0.02 0 -0 0</pose>
           <mass>0.103286</mass>
@@ -473,6 +476,7 @@
   
   <link name='pt_camera_link'>
   <pose relative_to='pt_link2_to_pt_camera_link'>0 0 0 0 -0 0</pose>
+  <gravity>false</gravity>
     <inertial>
       <pose>0 0 0 0 -0 0</pose>
       <mass>0.00623651844028495</mass>
@@ -616,22 +620,52 @@
       </axis>
   </joint>   
   
-  <joint name='pt_base_link_to_pt_link1' type='fixed'>
+  <joint name='pt_base_link_to_pt_link1' type='revolute'>
     <pose relative_to='base_footprint'>-0.008281 0 0.168 0 -0 0</pose>
       <parent>pt_base_link</parent>
     <child>pt_link1</child>
        <axis>
         <xyz>0 0 -1</xyz>
+        <limit>
+          <lower>-3.14159</lower>
+          <upper>3.14159</upper>
+          <effort>10</effort>
+          <velocity>2</velocity>
+        </limit>
+        <dynamics>
+          <damping>50.0</damping>
+          <friction>5.0</friction>
+        </dynamics>
       </axis>
-  </joint>     
-  
-  <joint name='pt_link1_to_pt_link2' type='fixed'>
+      <physics>
+        <ode>
+          <implicit_spring_damper>true</implicit_spring_damper>
+        </ode>
+      </physics>
+  </joint>
+
+  <joint name='pt_link1_to_pt_link2' type='revolute'>
     <pose relative_to='pt_link1'>0 0.02 0.043003 1.5708 -0 0</pose>
       <parent>pt_link1</parent>
     <child>pt_link2</child>
        <axis>
-        <xyz>0 -1 0</xyz>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.5236</lower>
+          <upper>1.5708</upper>
+          <effort>10</effort>
+          <velocity>2</velocity>
+        </limit>
+        <dynamics>
+          <damping>50.0</damping>
+          <friction>5.0</friction>
+        </dynamics>
       </axis>
+      <physics>
+        <ode>
+          <implicit_spring_damper>true</implicit_spring_damper>
+        </ode>
+      </physics>
   </joint>
   
   <joint name='pt_link2_to_pt_camera_link' type='fixed'>
@@ -680,6 +714,13 @@
     <robot_base_frame>base_footprint</robot_base_frame>
     </plugin>
     
+  <plugin name="pt_joint_pose_trajectory" filename="libgazebo_ros_joint_pose_trajectory.so">
+    <ros>
+      <remapping>set_joint_trajectory:=pt_joint_trajectory</remapping>
+    </ros>
+    <update_rate>10</update_rate>
+  </plugin>
+
     <plugin name="gazebo_ros_joint_state_publisher"
     filename="libgazebo_ros_joint_state_publisher.so">
 
@@ -694,7 +735,10 @@
   <joint_name>left_up_wheel_link_joint</joint_name>
   <joint_name>right_up_wheel_link_joint</joint_name>
   <joint_name>left_down_wheel_link_joint</joint_name>
-  <joint_name>right_down_wheel_link_joint</joint_name>  
+  <joint_name>right_down_wheel_link_joint</joint_name>
+  <joint_name>pt_base_link_to_pt_link1</joint_name>
+  <joint_name>pt_link1_to_pt_link2</joint_name>
   </plugin>
+
   </model>
 </sdf>

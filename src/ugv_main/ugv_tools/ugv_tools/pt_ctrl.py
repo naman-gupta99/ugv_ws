@@ -11,19 +11,25 @@ import threading
 import queue
 import time
 
+PLATFORM = "SIM"  # Change to "ROVER" when running on the actual rover
+TOPICS = {
+    "SIM": {"image_raw": "/pt_camera/image_raw", "joint_states": "/ugv/joint_states"},
+    "ROVER": {"image_raw": "/image_raw", "joint_states": "/ugv/joint_states"},
+}
+
 class PtCtrl(Node):
     def __init__(self, name):
         super().__init__(name)
 
         # Subscribe to image_raw (/image_raw topic topic)
-        self.image_raw_sub = self.create_subscription(Image, 'image_raw', self.image_raw_callback, 10)
+        self.image_raw_sub = self.create_subscription(Image, TOPICS[PLATFORM]["image_raw"], self.image_raw_callback, 10)
 
         self.curr = 0
         self.input_queue = queue.Queue()
         self.coord_queue = queue.Queue()
 
         self.pub_cmdJoint = self.create_publisher(
-            JointState, 'ugv/joint_states', 10
+            JointState, TOPICS[PLATFORM]["joint_states"], 10
         )
 
         # Get initial values without blocking the main thread

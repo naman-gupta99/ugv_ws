@@ -24,6 +24,7 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.actions import ExecuteProcess
+from launch_ros.actions import Node
 
 def generate_launch_description():
     # Get the directory of the launch file
@@ -71,6 +72,14 @@ def generate_launch_description():
         )
     )
 
+    # Gazebo driver: bridges ugv/joint_states -> set_joint_trajectory for pan-tilt
+    gazebo_driver_cmd = Node(
+        package='ugv_bringup',
+        executable='ugv_gazebo_driver',
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     # Create a launch description
     ld = LaunchDescription()
 
@@ -79,5 +88,6 @@ def generate_launch_description():
     ld.add_action(gzclient_cmd)
     ld.add_action(robot_state_publisher_cmd)
     ld.add_action(spawn_ugv_cmd)
+    ld.add_action(gazebo_driver_cmd)
 
     return ld

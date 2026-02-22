@@ -18,6 +18,17 @@ import pathlib
 import tempfile
 import traceback
 
+PLATFORM = "SIM"  # Change to "ROVER" when running on the actual rover
+TOPICS = {
+    "SIM": {
+        "image_raw": "/pt_camera/image_raw",
+        "joint_states": "ugv/joint_states"
+    },
+    "ROVER": {
+        "image_raw": "/image_raw",
+        "joint_states": "/ugv/joint_states"
+    }
+}
 
 class LlmPtCtrl(Node):
 
@@ -47,14 +58,14 @@ class LlmPtCtrl(Node):
 
         # Subscriptions
         self.image_raw_sub = self.create_subscription(
-            Image, "image_raw", self.image_raw_callback, 10
+            Image, TOPICS[PLATFORM]["image_raw"], self.image_raw_callback, 10
         )
         self.lidar_sub = self.create_subscription(
             LaserScan, "scan", self.lidar_callback, 10
         )
 
         # Publisher
-        self.pub_cmdJoint = self.create_publisher(JointState, "ugv/joint_states", 10)
+        self.pub_cmdJoint = self.create_publisher(JointState, TOPICS[PLATFORM]["joint_states"], 10)
 
         # Pan-Tilt Camera State
         self.x_rad = 0.0
