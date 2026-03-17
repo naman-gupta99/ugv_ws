@@ -32,6 +32,22 @@ class AgentState(TypedDict):
 
 class ValidationReactAgent:
     def __init__(self):
+        
+        
+        self.prompt = """
+        You are a rover navigation AI. Your mission is to visit **every integer grid point** inside the rectangular target area.
+        
+        
+WORLD & GOAL:
+- The rover moves on an integer (x, y) grid.
+- The target area is inclusive and given by:
+  target_area = {{'x_min': <>, 'x_max': <>, 'y_min': <>, 'y_max': <>}}
+  Visit every (x, y) where x_min ≤ x ≤ x_max and y_min ≤ y ≤ y_max.
+- mission_complete is True only after all required points have been visited.
+        
+        """
+        
+        
         self.tools = [move_ahead, move_back, move_left, move_right]
         self.model = Models().get_model("llama-3.3-70b").bind_tools(self.tools)
 
@@ -198,17 +214,10 @@ class ValidationReactAgent:
                 current_state = "State unavailable"
 
             comprehensive_message = f"""
-You are a rover navigation AI. Your mission is to visit **every integer grid point** inside the rectangular target area.
+{self.prompt}
 
 CURRENT STATE (JSON):
 {current_state}
-
-WORLD & GOAL:
-- The rover moves on an integer (x, y) grid.
-- The target area is inclusive and given by:
-  target_area = {{'x_min': <>, 'x_max': <>, 'y_min': <>, 'y_max': <>}}
-  Visit every (x, y) where x_min ≤ x ≤ x_max and y_min ≤ y ≤ y_max.
-- mission_complete is True only after all required points have been visited.
 
 AVAILABLE TOOLS (use these exact function names with NO parameters):
 - move_ahead()  - moves rover up (y+1)

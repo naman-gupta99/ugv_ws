@@ -7,6 +7,9 @@ import math
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState, Image, LaserScan
+from rclpy.action import ActionClient
+from ugv_interface.action import Behavior
+import json
 import threading
 import queue
 import time
@@ -32,17 +35,26 @@ TOPICS = {
 
 class LlmPtCtrl(Node):
 
-    def set_new_angles(self, x_rad, y_rad):
-        self.x_rad = x_rad
+    def set_new_angles(self, dx, y_rad):
+        if dx != 0:
+            command_type = 'drive_on_heading' if dx > 0 else 'back_up'
+            goal = Behavior.Goal()
+            goal.command = json.dumps([{'type': command_type, 'data': abs(dx)}])
+
+            done_event = threading.Event()
+
+            def _result_cb(_):
+                done_event.set()
+
+            def _goal_cb(future):
+                future.result().get_result_async().add_done_callback(_result_cb)
+
+            self._behavior_client.send_goal_async(goal).add_done_callback(_goal_cb)
+            done_event.wait()
         self.y_rad = y_rad
             
         self.publish_joint_state()
 
-        # Actuation Delay
-        """
-        TODO: There should either be a feedback mechanism confirming when the actuation is complete,
-        or a delay based on the difference in angles and known actuation speed.
-        """
         time.sleep(2.0)
 
         return True
@@ -51,7 +63,7 @@ class LlmPtCtrl(Node):
         return self.curr_lidar_scan
     
     def get_current_angles(self):
-        return self.x_rad, self.y_rad
+        return 0.0, self.y_rad
 
     def __init__(self, name):
         super().__init__(name)
@@ -68,7 +80,7 @@ class LlmPtCtrl(Node):
         self.pub_cmdJoint = self.create_publisher(JointState, TOPICS[PLATFORM]["joint_states"], 10)
 
         # Pan-Tilt Camera State
-        self.x_rad = 0.0
+        self.x_rad = math.pi / 2
         self.y_rad = 0.0
 
         # Image saving state
@@ -79,6 +91,9 @@ class LlmPtCtrl(Node):
         
         # Laser Scan state
         self.curr_lidar_scan = None
+
+        # Action client for rover drive commands
+        self._behavior_client = ActionClient(self, Behavior, 'behavior')
 
         # Capture directory (configurable via env var). Prefer mounted workspace if present,
         # otherwise fall back to user's home directory under ~/ugv_ws/captures.
@@ -197,10 +212,9 @@ class LlmPtCtrl(Node):
             self.get_logger().error(f"ValidationReactAgent failed: {exc}")
 
     def on_shutdown(self):
-        with self._angle_lock:
-            self.x_rad = 0.0
-            self.y_rad = 0.0
-            self.capture_image = False
+        self.y_rad = 0.0
+        self.x_rad = 0.0
+        self.capture_image = False
         self.publish_joint_state()
         self.get_logger().info("Shutting down LlmPtCtrl node.")
 

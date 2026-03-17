@@ -28,6 +28,10 @@ setup(
             'behavior_ctrl = ugv_tools.behavior_ctrl:main',
             'pt_ctrl = ugv_tools.pt_ctrl:main',
             'llm_pt_ctrl = ugv_tools.llm_pt_ctrl:main',
+            'align_ctrl = ugv_tools.align_ctrl:main',
+            'distance_ctrl = ugv_tools.distance_ctrl:main',
+            'inspection_pipeline = ugv_tools.inspection_pipeline:main',
+            'align_then_inspect_ctrl = ugv_tools.align_then_inspect_ctrl:main',
         ],
     },
 )

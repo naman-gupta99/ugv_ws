@@ -242,9 +242,9 @@ void Explore::makePlan()
   auto pose = costmap_client_.getRobotPose();
   // get frontiers sorted according to cost
   auto frontiers = search_.searchFrom(pose.position);
-  RCLCPP_DEBUG(logger_, "found %lu frontiers", frontiers.size());
+  RCLCPP_INFO(logger_, "found %lu frontiers", frontiers.size());
   for (size_t i = 0; i < frontiers.size(); ++i) {
-    RCLCPP_DEBUG(logger_, "frontier %zd cost: %f", i, frontiers[i].cost);
+    RCLCPP_INFO(logger_, "frontier %zd cost: %f centroid: (%.2f, %.2f)", i, frontiers[i].cost, frontiers[i].centroid.x, frontiers[i].centroid.y);
   }
 
   if (frontiers.empty()) {
@@ -284,7 +284,7 @@ void Explore::makePlan()
   if ((this->now() - last_progress_ >
       tf2::durationFromSec(progress_timeout_)) && !resuming_) {
     frontier_blacklist_.push_back(target_position);
-    RCLCPP_DEBUG(logger_, "Adding current goal to black list");
+    RCLCPP_WARN(logger_, "Progress timeout reached, blacklisting frontier at (%.2f, %.2f)", target_position.x, target_position.y);
     makePlan();
     return;
   }
@@ -299,7 +299,7 @@ void Explore::makePlan()
     return;
   }
 
-  RCLCPP_DEBUG(logger_, "Sending goal to move base nav2");
+  RCLCPP_INFO(logger_, "Sending goal to nav2: (%.2f, %.2f)", target_position.x, target_position.y);
 
   // send goal to move_base if we have something new to pursue
   auto goal = nav2_msgs::action::NavigateToPose::Goal();
@@ -361,9 +361,9 @@ void Explore::reachedGoal(const NavigationGoalHandle::WrappedResult& result,
       RCLCPP_DEBUG(logger_, "Goal was successful");
       break;
     case rclcpp_action::ResultCode::ABORTED:
-      RCLCPP_DEBUG(logger_, "Goal was aborted");
+      RCLCPP_WARN(logger_, "Goal was aborted by nav2, blacklisting frontier at (%.2f, %.2f)", frontier_goal.x, frontier_goal.y);
       frontier_blacklist_.push_back(frontier_goal);
-      RCLCPP_DEBUG(logger_, "Adding current goal to black list");
+      RCLCPP_INFO(logger_, "Adding current goal to black list");
       // If it was aborted probably because we've found another frontier goal,
       // so just return and don't make plan again
       return;

@@ -54,7 +54,8 @@ class State:
         )
         if self.update_rover_state_func:
             try:
-                result = self.update_rover_state_func(dx_rad, dy_rad)
+                dx = self.current_coordinates["x"] - self.path[-2]["x"]
+                result = self.update_rover_state_func(dx * 0.28, dy_rad)
                 if result is False:
                     print(
                         "[audit_toolset] Warning: Timed out waiting for rover state update."

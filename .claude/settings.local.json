@@ -7,7 +7,19 @@
       "Bash(source:*)",
       "Bash(ros2 topic pub:*)",
       "Bash(ros2 topic echo:*)",
-      "Bash(ros2 topic:*)"
+      "Bash(ros2 topic:*)",
+      "Bash(ls -lah /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/*/)",
+      "Bash(echo \"GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH\")",
+      "Bash(python3:*)",
+      "Read(//root/.gazebo/models/world/**)",
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(ls -lh /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/*/model.sdf)",
+      "Bash(gazebo --version)",
+      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.sdf ~/.gazebo/models/world_window/model.sdf)",
+      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.config ~/.gazebo/models/world_window/model.config)",
+      "Bash(mkdir -p ~/.gazebo/models/world_window)",
+      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.sdf ~/.gazebo/models/world_window/)",
+      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.config ~/.gazebo/models/world_window/)"
     ]
   }
 }

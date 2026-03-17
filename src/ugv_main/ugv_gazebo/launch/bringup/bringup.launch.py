@@ -32,6 +32,11 @@ def generate_launch_description():
     # Get the directory of the gazebo_ros package
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
 
+    # Prepend the package's models directory to GAZEBO_MODEL_PATH so installed
+    # models take precedence over ~/.gazebo/models cache entries.
+    pkg_models_dir = os.path.join(get_package_share_directory('ugv_gazebo'), 'models')
+    os.environ['GAZEBO_MODEL_PATH'] = pkg_models_dir + ':' + os.environ.get('GAZEBO_MODEL_PATH', '')
+
     # Get the use_sim_time parameter from the launch file
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
 

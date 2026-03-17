@@ -33,7 +33,7 @@ def generate_launch_description():
 
     # Declare the launch arguments
     declare_x_position_cmd = DeclareLaunchArgument(
-        'x_pose', default_value='0.0',
+        'x_pose', default_value='0.5',
         description='Specify namespace of the robot')
 
     declare_y_position_cmd = DeclareLaunchArgument(
@@ -45,7 +45,9 @@ def generate_launch_description():
         executable='spawn_entity.py',
         arguments=[
             '-entity', UGV_MODEL,
-            '-file', urdf_path
+            '-file', urdf_path,
+            '-x', LaunchConfiguration('x_pose'),
+            '-y', LaunchConfiguration('y_pose'),
         ],
         output='screen',
     )
