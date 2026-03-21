@@ -469,10 +469,10 @@
       <kinematic>0</kinematic>
       <enable_wind>0</enable_wind>
       <visual name="Wall_96_Visual_1">
-        <pose>0.75174 0 0.25 0 -0 0</pose>
+        <pose>0.626741 0 0.25 0 -0 0</pose>
         <geometry>
           <box>
-            <size>3.99652 0.15 0.5</size>
+            <size>4.246519 0.15 0.5</size>
           </box>
         </geometry>
         <material>
@@ -490,10 +490,10 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Visual_2">
-        <pose>2.06924 0 1.5 0 -0 0</pose>
+        <pose>2.194241 0 1.5 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.36152 0.15 2</size>
+            <size>1.111519 0.15 2</size>
           </box>
         </geometry>
         <material>
@@ -514,7 +514,7 @@
         <pose>0.070981 0 2.1 0 -0 0</pose>
         <geometry>
           <box>
-            <size>2.635 0.15 0.8</size>
+            <size>3.135 0.15 0.8</size>
           </box>
         </geometry>
         <material>
@@ -532,10 +532,10 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Visual_0">
-        <pose>-1.99826 0 1.25 0 -0 0</pose>
+        <pose>-2.12326 0 1.25 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.50348 0.15 2.5</size>
+            <size>1.253481 0.15 2.5</size>
           </box>
         </geometry>
         <material>
@@ -555,10 +555,10 @@
       <collision name="Wall_96_Collision_2">
         <laser_retro>0</laser_retro>
         <max_contacts>10</max_contacts>
-        <pose>2.06924 0 1.5 0 -0 0</pose>
+        <pose>2.194241 0 1.5 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.36152 0.15 2</size>
+            <size>1.111519 0.15 2</size>
           </box>
         </geometry>
         <surface>
@@ -610,10 +610,10 @@
       <collision name="Wall_96_Collision_0">
         <laser_retro>0</laser_retro>
         <max_contacts>10</max_contacts>
-        <pose>-1.99826 0 1.25 0 -0 0</pose>
+        <pose>-2.12326 0 1.25 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.50348 0.15 2.5</size>
+            <size>1.253481 0.15 2.5</size>
           </box>
         </geometry>
         <surface>
@@ -665,10 +665,10 @@
       <collision name="Wall_96_Collision_1">
         <laser_retro>0</laser_retro>
         <max_contacts>10</max_contacts>
-        <pose>0.75174 0 0.25 0 -0 0</pose>
+        <pose>0.626741 0 0.25 0 -0 0</pose>
         <geometry>
           <box>
-            <size>3.99652 0.15 0.5</size>
+            <size>4.246519 0.15 0.5</size>
           </box>
         </geometry>
         <surface>
@@ -723,7 +723,7 @@
         <pose>0.070981 0 2.1 0 -0 0</pose>
         <geometry>
           <box>
-            <size>2.635 0.15 0.8</size>
+            <size>3.135 0.15 0.8</size>
           </box>
         </geometry>
         <surface>
@@ -776,7 +776,7 @@
         <pose>0.071 0 1.675 0 -0 0</pose>
         <geometry>
           <box>
-            <size>2.635 0.12 0.05</size>
+            <size>3.135 0.12 0.05</size>
           </box>
         </geometry>
         <material>
@@ -797,7 +797,7 @@
         <pose>0.071 0 0.525 0 -0 0</pose>
         <geometry>
           <box>
-            <size>2.635 0.12 0.05</size>
+            <size>3.135 0.12 0.05</size>
           </box>
         </geometry>
         <material>
@@ -815,7 +815,7 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Win_FrameLeft">
-        <pose>-1.222 0 1.1 0 -0 0</pose>
+        <pose>-1.471519 0 1.1 0 -0 0</pose>
         <geometry>
           <box>
             <size>0.05 0.12 1.1</size>
@@ -836,7 +836,7 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Win_FrameRight">
-        <pose>1.363 0 1.1 0 -0 0</pose>
+        <pose>1.613481 0 1.1 0 -0 0</pose>
         <geometry>
           <box>
             <size>0.05 0.12 1.1</size>
@@ -878,10 +878,10 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Win_MidRailLeft">
-        <pose>-0.578 0 1.1 0 -0 0</pose>
+        <pose>-0.70276 0 1.1 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.238 0.1 0.04</size>
+            <size>1.487519 0.1 0.04</size>
           </box>
         </geometry>
         <material>
@@ -899,10 +899,10 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Win_MidRailRight">
-        <pose>0.72 0 1.1 0 -0 0</pose>
+        <pose>0.844741 0 1.1 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.237 0.1 0.04</size>
+            <size>1.487481 0.1 0.04</size>
           </box>
         </geometry>
         <material>
@@ -920,10 +920,10 @@
         <transparency>0</transparency>
       </visual>
       <visual name="Wall_96_Win_GlassUL">
-        <pose>-0.578 0 1.375 0 -0 0</pose>
+        <pose>-0.70276 0 1.375 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.238 0.04 0.525</size>
+            <size>1.487519 0.04 0.525</size>
           </box>
         </geometry>
         <material>
@@ -937,10 +937,10 @@
         <transparency>0.6</transparency>
       </visual>
       <visual name="Wall_96_Win_GlassLL">
-        <pose>-0.578 0 0.825 0 -0 0</pose>
+        <pose>-0.70276 0 0.825 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.238 0.04 0.525</size>
+            <size>1.487519 0.04 0.525</size>
           </box>
         </geometry>
         <material>
@@ -954,10 +954,10 @@
         <transparency>0.6</transparency>
       </visual>
       <visual name="Wall_96_Win_GlassUR">
-        <pose>0.72 0 1.375 0 -0 0</pose>
+        <pose>0.844741 0 1.375 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.237 0.04 0.525</size>
+            <size>1.487481 0.04 0.525</size>
           </box>
         </geometry>
         <material>
@@ -971,10 +971,10 @@
         <transparency>0.6</transparency>
       </visual>
       <visual name="Wall_96_Win_GlassLR">
-        <pose>0.72 0 0.825 0 -0 0</pose>
+        <pose>0.844741 0 0.825 0 -0 0</pose>
         <geometry>
           <box>
-            <size>1.237 0.04 0.525</size>
+            <size>1.487481 0.04 0.525</size>
           </box>
         </geometry>
         <material>

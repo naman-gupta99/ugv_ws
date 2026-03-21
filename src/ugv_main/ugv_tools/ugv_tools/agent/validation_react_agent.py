@@ -230,12 +230,14 @@ CRITICAL INSTRUCTIONS:
    Call exactly one tool per turn, e.g., move_right()
 2) These functions take NO parameters.
 3) Plan your path efficiently to cover the entire rectangle.
-   Hint: A serpentine sweep (row-by-row) minimizes turns:
+   IMPORTANT: x moves (left/right) are expensive — minimize them. y moves (up/down) are cheap — maximize them.
+   Hint: A column-by-column serpentine sweep keeps x changes to a minimum:
      - If not at (x_min, y_min), first navigate there.
-     - For y from y_min to y_max (inclusive):
-         - Sweep left→right on even rows ((y - y_min) % 2 == 0) from current x to x_max.
-         - Sweep right→left on odd rows from current x to x_min.
-         - Between rows, move up one cell to the next y (if y < y_max).
+     - For x from x_min to x_max (inclusive):
+         - Sweep bottom→top on even columns ((x - x_min) % 2 == 0): move up (y+1) until y == y_max.
+         - Sweep top→bottom on odd columns: move down (y-1) until y == y_min.
+         - Only after fully sweeping the current column, step right once (x+1) to the next column.
+     - Never move right/left in the middle of a column sweep; finish the entire column first.
 4) After each move, read the returned state to track progress.
 5) STOP when mission_complete == true. If complete, do not call any tool.
 6) Make sure to reason about the next best move based on current position and remaining points.

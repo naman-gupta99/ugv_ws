@@ -3,15 +3,22 @@
 
 import json
 import math
+import subprocess
 import threading
 import time
 
 import numpy as np
+from PIL import Image as PILImage
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import Image as RosImage
+from sensor_msgs.msg import JointState
 from sensor_msgs.msg import LaserScan
 from ugv_interface.action import Behavior
+
+from .agent.audit_toolset import audit_state_instance
 
 # Search range boundaries
 IDEAL_DISTANCE = 1.2   # m — target distance from wall
@@ -28,8 +35,24 @@ PROBE_STEP      = 0.1   # m — spacing between probe points during sweep
 POSITION_TOL    = 0.05  # m — acceptable error when moving to final position
 SAFETY_MARGIN   = 0.3  # m — buffer kept from any obstacle when moving
 
+# behavior_ctrl drives at exactly this speed (must match behavior_ctrl.py)
+MOVE_SPEED_M_S  = 0.2   # m/s
+MOVE_SETTLE_S   = 1.0   # extra settle time after movement completes
+
 # Midpoint of search range: rover goes to the nearer endpoint first
 _SWEEP_MIDPOINT = (MIN_DISTANCE + MAX_DISTANCE) / 2.0  # 1.55 m
+
+# Window detection via pan-tilt scan at MAX_DISTANCE
+IMAGE_SAVE_PATH       = '/tmp/dist_wall_capture.png'
+DETECT_API_URL        = 'http://127.0.0.1:8000/detect'
+PT_TILT_MIN_RAD       = -0.5   # tilt down limit
+PT_TILT_MAX_RAD       =  1.0   # tilt up limit
+PT_TILT_STEP_RAD      =  0.1
+PT_TILT_SETTLE_S      =  0.5
+WINDOW_MIN_CONFIDENCE =  0.70
+EDGE_MARGIN_PX        =  20    # px clearance on all sides = "fully visible"
+X_M_PER_UNIT          =  1.3   # metres per llmptctrl grid unit (x axis)
+Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
 
 
 class DistanceCtrl(Node):
@@ -41,6 +64,19 @@ class DistanceCtrl(Node):
         self.create_subscription(LaserScan, 'scan', self._scan_cb, 10)
         self._behavior_client = ActionClient(self, Behavior, 'behavior')
 
+        # Camera image
+        self._image: RosImage | None = None
+        self._image_event = threading.Event()
+        self.create_subscription(RosImage, '/pt_camera/image_raw', self._image_cb, 1)
+
+        # Camera intrinsics
+        self._camera_info: CameraInfo | None = None
+        self._camera_info_event = threading.Event()
+        self.create_subscription(CameraInfo, '/pt_camera/camera_info', self._camera_info_cb, 1)
+
+        # Pan-tilt joint publisher
+        self._joint_pub = self.create_publisher(JointState, '/ugv/joint_states', 10)
+
     # ------------------------------------------------------------------
     # Scan callbacks & helpers
     # ------------------------------------------------------------------
@@ -48,6 +84,15 @@ class DistanceCtrl(Node):
     def _scan_cb(self, msg):
         self._scan = msg
         self._scan_event.set()
+
+    def _image_cb(self, msg: RosImage) -> None:
+        self._image = msg
+        self._image_event.set()
+
+    def _camera_info_cb(self, msg: CameraInfo) -> None:
+        if self._camera_info is None:
+            self._camera_info = msg
+            self._camera_info_event.set()
 
     def _fresh_scan(self):
         """Wait for the next LiDAR scan and return it."""
@@ -99,6 +144,204 @@ class DistanceCtrl(Node):
 
         self.get_logger().info(f'    left: {lc:.2f} m   right: {rc:.2f} m')
         return lc >= SIDE_CLEARANCE and rc >= SIDE_CLEARANCE
+
+    # ------------------------------------------------------------------
+    # Pan-tilt camera helpers (same pattern as WallCenteringCtrl)
+    # ------------------------------------------------------------------
+
+    def _capture_image(self) -> str:
+        """Block until a fresh camera frame arrives, save as PNG, return path."""
+        self._image_event.clear()
+        if not self._image_event.wait(timeout=10.0) or self._image is None:
+            raise RuntimeError('No camera frame received within 10 s.')
+
+        msg = self._image
+        encoding = msg.encoding.lower()
+
+        if 'mono' in encoding:
+            raw = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width)
+            rgb = np.stack([raw] * 3, axis=-1)
+        else:
+            channels = 4 if encoding in ('rgba8', 'bgra8') else 3
+            raw = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, channels)
+            if 'bgr' in encoding:
+                rgb = raw[:, :, 2::-1]
+            else:
+                rgb = raw[:, :, :3]
+
+        PILImage.fromarray(rgb, 'RGB').save(IMAGE_SAVE_PATH)
+        return IMAGE_SAVE_PATH
+
+    def _call_detection_api(self, image_path: str) -> dict | None:
+        """POST image to detection API and return parsed JSON."""
+        try:
+            proc = subprocess.run(
+                ['curl', '-s', '-X', 'POST', DETECT_API_URL,
+                 '-F', f'file=@{image_path}'],
+                capture_output=True, text=True, timeout=15,
+            )
+            return json.loads(proc.stdout)
+        except Exception as exc:
+            self.get_logger().error(f'Detection API error: {exc}')
+            return None
+
+    def _best_detection(self, response: dict) -> dict | None:
+        """Return the detection with the highest confidence, or None."""
+        detections = response.get('detections', [])
+        if not detections:
+            return None
+        return max(detections, key=lambda d: d['confidence'])
+
+    def _set_pt_tilt(self, tilt_rad: float) -> None:
+        """Publish a JointState that sets tilt to tilt_rad with pan=0."""
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'ugv_joint_state'
+        msg.name = [
+            'left_up_wheel_link_joint',
+            'left_down_wheel_link_joint',
+            'right_up_wheel_link_joint',
+            'right_down_wheel_link_joint',
+            'pt_base_link_to_pt_link1',   # pan
+            'pt_link1_to_pt_link2',       # tilt
+        ]
+        msg.position = [0.0, 0.0, 0.0, 0.0, 0.0, tilt_rad]
+        self._joint_pub.publish(msg)
+
+    def _is_window_fully_visible(self, detection: dict,
+                                  image_width: int, image_height: int) -> bool:
+        """True when the bounding box does not clip any image edge."""
+        box = detection['box']
+        return (
+            box['x1'] > EDGE_MARGIN_PX and
+            box['x2'] < image_width  - EDGE_MARGIN_PX and
+            box['y1'] > EDGE_MARGIN_PX and
+            box['y2'] < image_height - EDGE_MARGIN_PX
+        )
+
+    def _pixel_to_wall(self, px: float, py: float,
+                        fx: float, fy: float, cx: float, cy: float,
+                        tilt_rad: float, wall_distance: float) -> tuple[float, float]:
+        """
+        Project pixel (px, py) onto the wall plane at wall_distance,
+        compensating for camera tilt_rad (positive = tilt down).
+
+        Returns (x_world, y_world):
+          x_world: positive = right
+          y_world: positive = up, NEGATIVE = DOWN
+        """
+        dy_cam   = (py - cy) / fy
+        dz_world = -math.sin(tilt_rad) * dy_cam + math.cos(tilt_rad)
+        t        = wall_distance / dz_world
+        x_world  = ((px - cx) / fx) * t
+        y_world  = (-math.cos(tilt_rad) * dy_cam - math.sin(tilt_rad)) * t
+        return x_world, y_world
+
+    def _scan_for_window_coords(self) -> dict | None:
+        """
+        Sweep the pan-tilt camera vertically (PT_TILT_MIN_RAD → PT_TILT_MAX_RAD).
+        At each tilt, capture an image and call the detection API.
+        When a window with confidence ≥ WINDOW_MIN_CONFIDENCE is fully visible
+        (bounding box does not clip any edge), project its corners onto the wall
+        plane accounting for the current tilt angle, then convert physical extents
+        to llmptctrl grid coordinates.
+
+        Grid convention: +x right, +y up, -y down.
+        Origin = wall point aligned with pan=0, tilt=0 optical axis.
+        Rates: 1.3 m/unit (x), 0.9 m/unit (y).
+
+        Updates audit_state_instance.target_area and regenerates remaining_coordinates.
+        Returns target_area dict or None if no fully-visible window was found.
+        """
+        if not self._camera_info_event.wait(timeout=10.0) or self._camera_info is None:
+            self.get_logger().error('No camera info — skipping window coord scan.')
+            return None
+
+        fx           = self._camera_info.k[0]
+        fy           = self._camera_info.k[4]
+        cx           = self._camera_info.k[2]
+        cy           = self._camera_info.k[5]
+        image_width  = self._camera_info.width
+        image_height = self._camera_info.height
+
+        wall_distance = self.front_distance()
+        if wall_distance is None:
+            self.get_logger().error('Cannot read wall distance — aborting coord calc.')
+            return None
+
+        tilt_positions = list(np.arange(
+            PT_TILT_MIN_RAD,
+            PT_TILT_MAX_RAD + PT_TILT_STEP_RAD / 2,
+            PT_TILT_STEP_RAD,
+        ))
+        self.get_logger().info(
+            f'Window coord scan at {wall_distance:.2f} m: '
+            f'{len(tilt_positions)} tilt positions '
+            f'[{PT_TILT_MIN_RAD:.2f} … {PT_TILT_MAX_RAD:.2f} rad]'
+        )
+
+        for tilt in tilt_positions:
+            self.get_logger().info(f'  Tilt → {tilt:+.2f} rad')
+            self._set_pt_tilt(tilt)
+            time.sleep(PT_TILT_SETTLE_S)
+
+            try:
+                image_path = self._capture_image()
+            except RuntimeError as exc:
+                self.get_logger().warn(f'  Frame capture failed: {exc}')
+                continue
+
+            response = self._call_detection_api(image_path)
+            if response is None:
+                continue
+
+            best = self._best_detection(response)
+            if best is None or best['confidence'] < WINDOW_MIN_CONFIDENCE:
+                continue
+
+            if not self._is_window_fully_visible(best, image_width, image_height):
+                self.get_logger().info(
+                    f'  Detected (conf={best["confidence"]:.3f}) but clipped — continuing.'
+                )
+                continue
+
+            # Project bounding box corners onto wall plane, compensating for tilt
+            box = best['box']
+            x_left,  y_top    = self._pixel_to_wall(
+                box['x1'], box['y1'], fx, fy, cx, cy, tilt, wall_distance)
+            x_right, y_bottom = self._pixel_to_wall(
+                box['x2'], box['y2'], fx, fy, cx, cy, tilt, wall_distance)
+            # y_top >= 0   : top of box is above or at optical-axis height
+            # y_bottom <= 0: bottom of box is below optical-axis height (-y = down)
+
+            y_compensation = math.tan(tilt) * wall_distance
+
+            x_min = math.floor(x_left                      / X_M_PER_UNIT)
+            x_max = math.ceil( x_right                     / X_M_PER_UNIT)
+            y_min = math.floor((y_bottom + y_compensation) / Y_M_PER_UNIT)
+            y_max = math.ceil( (y_top    + y_compensation) / Y_M_PER_UNIT)
+
+            target_area = {'x_min': x_min, 'x_max': x_max,
+                           'y_min': y_min, 'y_max': y_max}
+
+            self.get_logger().info(
+                f'  Fully-visible window  tilt={tilt:+.2f} rad  '
+                f'conf={best["confidence"]:.3f}\n'
+                f'  wall coords: x=[{x_left:.2f}, {x_right:.2f}] m  '
+                f'y=[{y_bottom:.2f}, {y_top:.2f}] m\n'
+                f'  grid target_area: {target_area}'
+            )
+
+            audit_state_instance.target_area = target_area
+            audit_state_instance.remaining_coordinates = \
+                audit_state_instance._State__generate_goal_coordinates()
+
+            self._set_pt_tilt(0.0)
+            return target_area
+
+        self.get_logger().warn('Window coord scan complete — no fully-visible window found.')
+        self._set_pt_tilt(0.0)
+        return None
 
     # ------------------------------------------------------------------
     # Motion
@@ -161,7 +404,10 @@ class DistanceCtrl(Node):
 
         self._behavior_client.send_goal_async(goal).add_done_callback(_goal_cb)
         done.wait()
-        time.sleep(1)
+        # behavior_ctrl queues the command and returns the action result
+        # immediately (before movement starts).  Sleep long enough for the
+        # physical move to complete, then add a settle buffer.
+        time.sleep(actual / MOVE_SPEED_M_S + MOVE_SETTLE_S)
         return actual
 
     # ------------------------------------------------------------------
@@ -239,15 +485,76 @@ class DistanceCtrl(Node):
             f'Sweep: {sweep_start:.1f} m → {sweep_end:.1f} m '
             f'(step {PROBE_STEP} m, {sweep_dir:+d} direction)')
 
-        # Move from current d to sweep start
+        # Move from current d to sweep start, checking clearance first.
+        # _send_move also clamps internally; this pre-check additionally
+        # caps sweep_start so _farthest_point is accurate.
         delta_to_start = d - sweep_start   # >0 → toward wall, <0 → away
+
+        if delta_to_start > 0:
+            # Moving toward wall — verify front clearance.
+            front = self.front_distance()
+            if front is None:
+                self.get_logger().warn('Cannot read front distance — skipping forward move.')
+                delta_to_start = 0.0
+            else:
+                available_fwd = front - SAFETY_MARGIN
+                if available_fwd <= 0:
+                    self.get_logger().warn(
+                        f'Front blocked (clearance {front:.2f} m) — skipping forward move.')
+                    delta_to_start = 0.0
+                elif available_fwd < delta_to_start:
+                    # Can't reach sweep_start; go as far as safely possible
+                    sweep_start    = d - available_fwd
+                    delta_to_start = available_fwd
+                    self.get_logger().warn(
+                        f'Front clearance {front:.2f} m limits forward move to '
+                        f'{available_fwd:.2f} m — sweep starts at {sweep_start:.2f} m.')
+
+        elif delta_to_start < 0:
+            # Backing away from wall — verify rear clearance.
+            rear = self.rear_distance()
+            if rear is None:
+                self.get_logger().warn('Cannot read rear distance — skipping back-up.')
+                delta_to_start = 0.0
+            else:
+                available_back = rear - SAFETY_MARGIN
+                if available_back <= 0:
+                    self.get_logger().warn(
+                        f'Rear blocked (clearance {rear:.2f} m) — skipping back-up.')
+                    delta_to_start = 0.0
+                elif available_back < abs(delta_to_start):
+                    # Can't reach sweep_start; back up as far as safely possible
+                    sweep_start    = d + available_back
+                    delta_to_start = -available_back
+                    self.get_logger().warn(
+                        f'Rear clearance {rear:.2f} m limits back-up to '
+                        f'{available_back:.2f} m — sweep starts at {sweep_start:.2f} m.')
+
         actual = self._send_move(delta_to_start)
-        # Derive actual position: movement reduces/increases distance from wall
         current_d = d - math.copysign(actual, delta_to_start)
 
         # ── 4. Single-pass sweep — probe every PROBE_STEP ─────────────
+        # For backward sweeps (sweep_dir=+1) also cap sweep_end so the total
+        # planned travel never exceeds the current rear clearance.
+        if sweep_dir == 1:
+            rear = self.rear_distance()
+            if rear is None or rear - SAFETY_MARGIN <= 0:
+                self.get_logger().warn(
+                    f'Rear clearance {rear} m too small — limiting sweep to current position.')
+                sweep_end = current_d
+            else:
+                available_rear = rear - SAFETY_MARGIN
+                max_safe_end   = current_d + available_rear
+                if max_safe_end < sweep_end:
+                    self.get_logger().warn(
+                        f'Rear clearance {rear:.2f} m caps backward sweep '
+                        f'to {max_safe_end:.2f} m (was {sweep_end:.2f} m).')
+                    sweep_end = max_safe_end
+
+        _farthest_point = max(sweep_start, sweep_end)
         n_steps = int(round(abs(sweep_end - sweep_start) / PROBE_STEP))
         accessible_positions = []   # wall distances where rover is accessible
+        _window_scan_done = False
 
         for step_idx in range(n_steps + 1):
             # Clamp to avoid floating-point overshoot at boundaries
@@ -259,6 +566,14 @@ class DistanceCtrl(Node):
                 self.get_logger().info(f'  -> ACCESSIBLE at {probe_d:.2f} m')
             else:
                 self.get_logger().info(f'  -> blocked at {probe_d:.2f} m')
+
+            # At the farthest probe point, scan for window grid coordinates.
+            if not _window_scan_done and abs(probe_d - _farthest_point) < PROBE_STEP / 2:
+                self.get_logger().info(
+                    f'At farthest probe point ({probe_d:.2f} m) — scanning for window coordinates.'
+                )
+                self._scan_for_window_coords()
+                _window_scan_done = True
 
             # Advance to next probe point (skip after last step)
             if step_idx < n_steps:

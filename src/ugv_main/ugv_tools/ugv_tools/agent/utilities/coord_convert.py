@@ -1,5 +1,8 @@
 import math
 
+X_M_PER_UNIT          =  1.3   # metres per llmptctrl grid unit (x axis)
+Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
+
 def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, current_angles):
     """
     Convert pixel coordinates to pan-tilt angle differences in radians.
@@ -35,7 +38,7 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
     y_idx = curr_y_rad * a + mid
     dist_y = laser_scan.ranges[int(y_idx)]
 
-    rad_x = math.atan(math.tan(curr_x_rad) + (0.28*dx)/dist_x)
-    rad_y = math.atan(math.tan(curr_y_rad) + (0.28*dy)/dist_y)
+    rad_x = math.atan(math.tan(curr_x_rad) + (X_M_PER_UNIT*dx)/dist_x)
+    rad_y = math.atan(math.tan(curr_y_rad) + (Y_M_PER_UNIT*dy)/dist_y)
 
     return rad_x, rad_y

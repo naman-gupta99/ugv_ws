@@ -1,0 +1,8 @@
+Using gemini-2.5-flash
+
+UNUSABLE
+
+just 1 window
+
+Probable issues:
+- Alignment of the rover in perpendicular was a little off, resulting in the right side of the window not getting covered.

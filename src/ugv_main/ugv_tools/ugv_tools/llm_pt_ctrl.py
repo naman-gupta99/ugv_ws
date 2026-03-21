@@ -24,7 +24,7 @@ import traceback
 PLATFORM = "SIM"  # Change to "ROVER" when running on the actual rover
 TOPICS = {
     "SIM": {
-        "image_raw": "/pt_camera/image_raw",
+        "image_raw": "/overhead_camera/image_raw",
         "joint_states": "ugv/joint_states"
     },
     "ROVER": {
@@ -108,6 +108,9 @@ class LlmPtCtrl(Node):
         else:
             self.capture_base_dir = home_fallback
 
+        run_ts = time.strftime("%Y%m%d%H%M%S")
+        self._run_dir = os.path.join(self.capture_base_dir, f"run_{run_ts}")
+
         # Timer to periodically call publish_joint_state
         # self.timer = self.create_timer(0.1, self.publish_joint_state)
 
@@ -140,12 +143,11 @@ class LlmPtCtrl(Node):
                 image_to_save = self.curr_image_raw.copy()
 
         if image_to_save is not None:
-            date_folder = time.strftime("%Y%m%d%H%M")
-            capture_dir = os.path.join(self.capture_base_dir, date_folder)
+            coord = audit_state_instance.current_coordinates
+            fname = f"x{coord['x']}_y{coord['y']}_{self.curr}.png"
             try:
-                # Use pathlib to ensure parent directories are created
-                pathlib.Path(capture_dir).mkdir(parents=True, exist_ok=True)
-                filename = os.path.join(capture_dir, f"decision{self.curr}.png")
+                pathlib.Path(self._run_dir).mkdir(parents=True, exist_ok=True)
+                filename = os.path.join(self._run_dir, fname)
                 ok = cv2.imwrite(filename, image_to_save)
                 if ok:
                     self.get_logger().info(
@@ -158,12 +160,12 @@ class LlmPtCtrl(Node):
                 # Log full traceback to help debugging permission or filesystem issues
                 tb = traceback.format_exc()
                 self.get_logger().error(
-                    f"Failed to save image to {capture_dir}: {exc}\n{tb}"
+                    f"Failed to save image to {self._run_dir}: {exc}\n{tb}"
                 )
                 # Fallback: create a temp directory we can write to
                 try:
                     tmpdir = tempfile.mkdtemp(prefix="ugv_captures_")
-                    tmpfile = os.path.join(tmpdir, f"decision{self.curr}.png")
+                    tmpfile = os.path.join(tmpdir, fname)
                     cv2.imwrite(tmpfile, image_to_save)
                     self.get_logger().info(
                         f"Image saved to fallback location {tmpfile}"

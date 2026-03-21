@@ -134,9 +134,6 @@ class BehaviorController(Node):
             diff_x = self.distance.x - start_distance.x
             diff_y = self.distance.y - start_distance.y
             delta_distance = math.hypot(diff_x, diff_y)
-            
-            print('now distance:', self.distance.x, self.distance.y)    
-            print('Distance moved:', delta_distance)
             self.velocity_publisher.publish(twist_msg)
         self.stop()
 
@@ -157,9 +154,6 @@ class BehaviorController(Node):
             diff_x = self.distance.x - start_distance.x
             diff_y = self.distance.y - start_distance.y
             delta_distance = math.hypot(diff_x, diff_y)
-            
-            print('now distance:', self.distance.x, self.distance.y)    
-            print('Distance moved:', delta_distance)
             self.velocity_publisher.publish(twist_msg)
         self.stop()
         
@@ -185,8 +179,7 @@ class BehaviorController(Node):
         delta_yaw = 0.0
         while abs(delta_yaw) < abs(math.radians(angle)):
             delta_yaw = self.yaw - start_yaw
-            delta_yaw = (delta_yaw + math.pi) % (2 * math.pi) - math.pi 
-            print(f'Rotated angle: {math.degrees(delta_yaw)} degrees')
+            delta_yaw = (delta_yaw + math.pi) % (2 * math.pi) - math.pi
             self.velocity_publisher.publish(twist_msg)
         self.stop()
         

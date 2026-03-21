@@ -17,6 +17,15 @@ from ugv_interface.action import Behavior
 # Angular half-width of the front sector used for wall detection (degrees)
 FRONT_HALF_ANGLE_DEG = 10.0
 
+# Iterative refinement: stop correcting when the residual error is below this
+ALIGN_THRESHOLD_DEG = 0.5
+# Maximum correction iterations before giving up
+MAX_ALIGN_ITER = 5
+# Number of consecutive scans to average for a stable wall-angle measurement
+NUM_SCANS_TO_AVG = 3
+# Calibrated time for a 90° spin — used to derive proportional waits
+SPIN_90_S = 12.0
+
 
 class AlignCtrl(Node):
 
@@ -48,56 +57,106 @@ class AlignCtrl(Node):
 
     def _align_parallel(self):
         """Spin the rover to be parallel to the wall in front (wall on the right)."""
-        self.get_logger().info('Waiting for LiDAR scan...')
+        self.get_logger().info('Waiting for initial LiDAR scan...')
         self._scan_event.wait()
 
-        points = self._front_wall_points(self._scan)
-        if len(points) < 5:
-            self.get_logger().error('Not enough wall points in front sector — aborting.')
-            return
+        for iteration in range(MAX_ALIGN_ITER):
+            wall_angle = self._measure_wall_angle_averaged()
+            if wall_angle is None:
+                self.get_logger().error('Not enough wall points in front sector — aborting.')
+                return
 
-        wall_angle = self._wall_angle(points)
+            # After rotating by `rot`, the wall centre (currently at roughly +x) ends up
+            # at (d·cos(rot), −d·sin(rot)).  For wall on the right: −d·sin(rot) < 0,
+            # i.e. sin(rot) > 0, so 0 < rot < π.  The wall line has two antipodal
+            # directions; pick the one that satisfies this constraint.
+            rot = wall_angle
+            if math.sin(rot) <= 0:
+                rot += math.pi
+            rot = (rot + math.pi) % (2 * math.pi) - math.pi
+            rot_deg = math.degrees(rot)
 
-        # After rotating by `rot`, the wall centre (currently at roughly +x) ends up
-        # at (d·cos(rot), −d·sin(rot)).  For wall on the right: −d·sin(rot) < 0,
-        # i.e. sin(rot) > 0, so 0 < rot < π.  The wall line has two antipodal
-        # directions; pick the one that satisfies this constraint.
-        rot = wall_angle
-        if math.sin(rot) <= 0:
-            rot += math.pi
-        rot = (rot + math.pi) % (2 * math.pi) - math.pi
-        rot_deg = math.degrees(rot)
+            self.get_logger().info(
+                f'[iter {iteration + 1}/{MAX_ALIGN_ITER}] '
+                f'Wall angle: {math.degrees(wall_angle):.2f}°  →  correction: {rot_deg:.2f}° (parallel, wall on right)'
+            )
 
-        self.get_logger().info(
-            f'Wall angle: {math.degrees(wall_angle):.1f}°  →  spinning {rot_deg:.1f}° (parallel, wall on right)'
+            if abs(rot_deg) < ALIGN_THRESHOLD_DEG:
+                self.get_logger().info(
+                    f'Residual error {abs(rot_deg):.2f}° < {ALIGN_THRESHOLD_DEG}° threshold — alignment complete.'
+                )
+                return
+
+            spin_wait_s = max(3.0, abs(rot_deg) / 90.0 * SPIN_90_S)
+            self.get_logger().info(f'Spinning {rot_deg:.2f}° — waiting {spin_wait_s:.1f} s for physical completion.')
+            self._send_spin(rot_deg)
+            time.sleep(spin_wait_s)
+
+        self.get_logger().warn(
+            f'Reached max iterations ({MAX_ALIGN_ITER}) — alignment may have residual error.'
         )
-        self._send_spin(rot_deg)
-        self.get_logger().info('Spin complete — rover is now parallel to wall (wall on right).')
 
     def _align_perpendicular(self):
         """Spin the rover to face directly into the wall in front."""
-        self.get_logger().info('Waiting for LiDAR scan...')
+        self.get_logger().info('Waiting for initial LiDAR scan...')
         self._scan_event.wait()
 
-        points = self._front_wall_points(self._scan)
-        if len(points) < 5:
-            self.get_logger().error('Not enough wall points in front sector — aborting.')
-            return
+        for iteration in range(MAX_ALIGN_ITER):
+            wall_angle = self._measure_wall_angle_averaged()
+            if wall_angle is None:
+                self.get_logger().error('Not enough wall points in front sector — aborting.')
+                return
 
-        wall_angle = self._wall_angle(points)
+            # Rotate so the wall runs at ±90° in the new robot frame (left-right),
+            # making the robot face the wall.  Two candidates; pick the smaller rotation.
+            rot_a = (wall_angle - math.pi / 2 + math.pi) % (2 * math.pi) - math.pi
+            rot_b = (wall_angle + math.pi / 2 + math.pi) % (2 * math.pi) - math.pi
+            rot = rot_a if abs(rot_a) <= abs(rot_b) else rot_b
+            rot_deg = math.degrees(rot)
 
-        # Rotate so the wall runs at ±90° in the new robot frame (left-right),
-        # making the robot face the wall.  Two candidates; pick the smaller rotation.
-        rot_a = (wall_angle - math.pi / 2 + math.pi) % (2 * math.pi) - math.pi
-        rot_b = (wall_angle + math.pi / 2 + math.pi) % (2 * math.pi) - math.pi
-        rot = rot_a if abs(rot_a) <= abs(rot_b) else rot_b
-        rot_deg = math.degrees(rot)
+            self.get_logger().info(
+                f'[iter {iteration + 1}/{MAX_ALIGN_ITER}] '
+                f'Wall angle: {math.degrees(wall_angle):.2f}°  →  correction: {rot_deg:.2f}° (perpendicular)'
+            )
 
-        self.get_logger().info(
-            f'Wall angle: {math.degrees(wall_angle):.1f}°  →  spinning {rot_deg:.1f}° (perpendicular)'
+            if abs(rot_deg) < ALIGN_THRESHOLD_DEG:
+                self.get_logger().info(
+                    f'Residual error {abs(rot_deg):.2f}° < {ALIGN_THRESHOLD_DEG}° threshold — alignment complete.'
+                )
+                return
+
+            spin_wait_s = max(3.0, abs(rot_deg) / 90.0 * SPIN_90_S)
+            self.get_logger().info(f'Spinning {rot_deg:.2f}° — waiting {spin_wait_s:.1f} s for physical completion.')
+            self._send_spin(rot_deg)
+            time.sleep(spin_wait_s)
+
+        self.get_logger().warn(
+            f'Reached max iterations ({MAX_ALIGN_ITER}) — alignment may have residual error.'
         )
-        self._send_spin(rot_deg)
-        self.get_logger().info('Spin complete — rover is now perpendicular to wall (facing it).')
+
+    def _get_fresh_scan(self):
+        """Block until a new scan arrives (clears any cached scan first)."""
+        self._scan_event.clear()
+        self._scan_event.wait()
+        return self._scan
+
+    def _measure_wall_angle_averaged(self):
+        """
+        Collect NUM_SCANS_TO_AVG fresh scans and return a circular-mean wall
+        angle for noise reduction.  Returns None if there are never enough points.
+        """
+        angles = []
+        for _ in range(NUM_SCANS_TO_AVG):
+            scan = self._get_fresh_scan()
+            points = self._front_wall_points(scan)
+            if len(points) >= 5:
+                angles.append(self._wall_angle(points))
+        if not angles:
+            return None
+        # Circular mean — correct across the ±π wrap.
+        sin_mean = np.mean(np.sin(angles))
+        cos_mean = np.mean(np.cos(angles))
+        return math.atan2(sin_mean, cos_mean)
 
     def _wall_angle(self, points):
         """Return the angle (radians) of the dominant wall direction via SVD."""

@@ -31,7 +31,6 @@ setup(
             'align_ctrl = ugv_tools.align_ctrl:main',
             'distance_ctrl = ugv_tools.distance_ctrl:main',
             'inspection_pipeline = ugv_tools.inspection_pipeline:main',
-            'align_then_inspect_ctrl = ugv_tools.align_then_inspect_ctrl:main',
         ],
     },
 )

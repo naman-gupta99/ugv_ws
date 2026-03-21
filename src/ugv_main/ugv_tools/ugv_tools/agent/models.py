@@ -7,16 +7,11 @@ class Models:
         }
 
     def _get_llama_3_3_70b(self):
-        from langchain_aws import ChatBedrockConverse
-        import boto3
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
-        bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
-        llm = ChatBedrockConverse(
-            model="us.meta.llama3-3-70b-instruct-v1:0",
-            temperature=0,
-            client=bedrock_client,
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash", temperature=0
         )
-
         return llm
 
     def get_model(self, model_name) -> BaseChatModel:

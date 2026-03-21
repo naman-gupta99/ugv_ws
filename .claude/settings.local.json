@@ -19,7 +19,39 @@
       "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.config ~/.gazebo/models/world_window/model.config)",
       "Bash(mkdir -p ~/.gazebo/models/world_window)",
       "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.sdf ~/.gazebo/models/world_window/)",
-      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.config ~/.gazebo/models/world_window/)"
+      "Bash(cp install/ugv_gazebo/share/ugv_gazebo/models/world_window/model.config ~/.gazebo/models/world_window/)",
+      "Bash(grep -r \"pt_base_link_to_pt_link1\\\\|pt_link1_to_pt_link2\" /home/ws/ugv_ws/src --include=*.py --include=*.urdf --include=*.xacro)",
+      "Bash(git stash:*)",
+      "Read(//root/.gazebo/**)",
+      "Bash(/dev/null -name *.world -o -name model.sdf)",
+      "Bash(cp /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/world/model.sdf /root/.gazebo/models/world/model.sdf)",
+      "Bash(echo \"Copied to Gazebo cache: $?\")",
+      "Bash(export GOOGLE_API_KEY=AQ.Ab8RN6LUvMGz4uAOhj8xVLJEu4noldJUXrEHHI6ZTUBAzLXR5A)",
+      "Bash(grep -n \"create_subscription\\\\|create_publisher\" /home/ws/ugv_ws/src/ugv_main/ugv_tools/ugv_tools/*.py)",
+      "Bash(grep -o plugin.*filename.*.so /home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/world/model.sdf)"
+    ]
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -H \"Title: Claude (UGV Project)\" -H \"Priority: high\" -H \"Tags: robot,warning\" -H \"Click: https://ntfy.sh/naman_claude_ugv\" -d \"Claude is waiting for input or permission in your terminal.\" ntfy.sh/naman_claude_ugv"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -H \"Title: Task Complete\" -H \"Priority: default\" -H \"Tags: white_check_mark,computer\" -d \"Claude has finished the current run.\" ntfy.sh/naman_claude_ugv"
+          }
+        ]
+      }
     ]
   }
 }
