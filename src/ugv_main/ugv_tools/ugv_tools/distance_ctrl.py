@@ -19,6 +19,7 @@ from sensor_msgs.msg import LaserScan
 from ugv_interface.action import Behavior
 
 from .agent.audit_toolset import audit_state_instance
+from .lidar_scan_utils import process_scan_for_rover
 
 # Search range boundaries
 IDEAL_DISTANCE = 1.2   # m — target distance from wall
@@ -51,7 +52,7 @@ PT_TILT_STEP_RAD      =  0.1
 PT_TILT_SETTLE_S      =  0.5
 WINDOW_MIN_CONFIDENCE =  0.70
 EDGE_MARGIN_PX        =  20    # px clearance on all sides = "fully visible"
-X_M_PER_UNIT          =  1.3   # metres per llmptctrl grid unit (x axis)
+X_M_PER_UNIT          =  1.1   # metres per llmptctrl grid unit (x axis)
 Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
 
 
@@ -63,6 +64,7 @@ class DistanceCtrl(Node):
         self._scan_event = threading.Event()
         self.create_subscription(LaserScan, 'scan', self._scan_cb, 10)
         self._behavior_client = ActionClient(self, Behavior, 'behavior')
+        self._side_clearance_m = SIDE_CLEARANCE
 
         # Camera image
         self._image: RosImage | None = None
@@ -82,7 +84,7 @@ class DistanceCtrl(Node):
     # ------------------------------------------------------------------
 
     def _scan_cb(self, msg):
-        self._scan = msg
+        self._scan = process_scan_for_rover(msg)
         self._scan_event.set()
 
     def _image_cb(self, msg: RosImage) -> None:
@@ -142,8 +144,11 @@ class DistanceCtrl(Node):
             self.get_logger().warn('  Side sector returned no valid readings — marking inaccessible.')
             return False
 
-        self.get_logger().info(f'    left: {lc:.2f} m   right: {rc:.2f} m')
-        return lc >= SIDE_CLEARANCE and rc >= SIDE_CLEARANCE
+        threshold = self._side_clearance_m
+        self.get_logger().info(
+            f'    left: {lc:.2f} m   right: {rc:.2f} m   threshold: {threshold:.2f} m'
+        )
+        return lc >= threshold and rc >= threshold
 
     # ------------------------------------------------------------------
     # Pan-tilt camera helpers (same pattern as WallCenteringCtrl)
@@ -280,6 +285,18 @@ class DistanceCtrl(Node):
             f'[{PT_TILT_MIN_RAD:.2f} … {PT_TILT_MAX_RAD:.2f} rad]'
         )
 
+        def _round_min_threshold(value: float) -> int:
+            frac, int_part = math.modf(value)
+            if abs(frac) > 0.5:
+                return math.floor(value)
+            return int(int_part)
+
+        def _round_max_threshold(value: float) -> int:
+            frac, int_part = math.modf(value)
+            if abs(frac) > 0.5:
+                return math.ceil(value)
+            return int(int_part)
+
         for tilt in tilt_positions:
             self.get_logger().info(f'  Tilt → {tilt:+.2f} rad')
             self._set_pt_tilt(tilt)
@@ -314,12 +331,15 @@ class DistanceCtrl(Node):
             # y_top >= 0   : top of box is above or at optical-axis height
             # y_bottom <= 0: bottom of box is below optical-axis height (-y = down)
 
+            window_width_m = abs(x_right - x_left)
+            self._side_clearance_m = (window_width_m + X_M_PER_UNIT) / 2.0
+
             y_compensation = math.tan(tilt) * wall_distance
 
-            x_min = math.floor(x_left                      / X_M_PER_UNIT)
-            x_max = math.ceil( x_right                     / X_M_PER_UNIT)
-            y_min = math.floor((y_bottom + y_compensation) / Y_M_PER_UNIT)
-            y_max = math.ceil( (y_top    + y_compensation) / Y_M_PER_UNIT)
+            x_min = _round_min_threshold(x_left / X_M_PER_UNIT)
+            x_max = _round_max_threshold(x_right / X_M_PER_UNIT)
+            y_min = _round_min_threshold((y_bottom + y_compensation) / Y_M_PER_UNIT)
+            y_max = _round_max_threshold((y_top + y_compensation) / Y_M_PER_UNIT)
 
             target_area = {'x_min': x_min, 'x_max': x_max,
                            'y_min': y_min, 'y_max': y_max}
@@ -329,6 +349,7 @@ class DistanceCtrl(Node):
                 f'conf={best["confidence"]:.3f}\n'
                 f'  wall coords: x=[{x_left:.2f}, {x_right:.2f}] m  '
                 f'y=[{y_bottom:.2f}, {y_top:.2f}] m\n'
+                f'  side clearance threshold: {self._side_clearance_m:.2f} m\n'
                 f'  grid target_area: {target_area}'
             )
 

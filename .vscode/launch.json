@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ROS: Attach inspection_pipeline",
+      "type": "python",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "justMyCode": false,
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/src/ugv_main/ugv_tools/ugv_tools",
+          "remoteRoot": "/home/ws/ugv_ws/install/ugv_tools/lib/python3.10/site-packages/ugv_tools"
+        }
+      ]
+    }
+  ]
+}

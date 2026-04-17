@@ -28,6 +28,8 @@ from sensor_msgs.msg import JointState
 from sensor_msgs.msg import LaserScan
 from ugv_interface.action import Behavior
 
+from .lidar_scan_utils import process_scan_for_rover
+
 
 # ---------------------------------------------------------------------------
 # Tunable constants
@@ -102,7 +104,7 @@ class WallCenteringCtrl(Node):
             self._camera_info_event.set()
 
     def _scan_cb(self, msg: LaserScan) -> None:
-        self._scan = msg
+        self._scan = process_scan_for_rover(msg)
         self._scan_event.set()
 
     # ------------------------------------------------------------------

@@ -6,3 +6,5 @@ langchain_core
 langgraph
 langchain_aws
 numpy<2
+python-dotenv
+debugpy

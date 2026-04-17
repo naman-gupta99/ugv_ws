@@ -119,7 +119,8 @@ def generate_launch_description():
                 respawn=use_respawn,
                 respawn_delay=2.0,
                 parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
+                arguments=['--ros-args', '--log-level', log_level,
+                           '--log-level', 'global_costmap.global_costmap:=warn'],
                 remappings=remappings),
             Node(
                 package='nav2_amcl',
@@ -129,14 +130,16 @@ def generate_launch_description():
                 respawn=use_respawn,
                 respawn_delay=2.0,
                 parameters=[configured_params],
-                arguments=['--ros-args', '--log-level', log_level],
+                arguments=['--ros-args', '--log-level', log_level,
+                           '--log-level', 'global_costmap.global_costmap:=warn'],
                 remappings=remappings),
             Node(
                 package='nav2_lifecycle_manager',
                 executable='lifecycle_manager',
                 name='lifecycle_manager_localization',
                 output='screen',
-                arguments=['--ros-args', '--log-level', log_level],
+                arguments=['--ros-args', '--log-level', log_level,
+                           '--log-level', 'global_costmap.global_costmap:=warn'],
                 parameters=[{'use_sim_time': use_sim_time},
                             {'autostart': autostart},
                             {'node_names': lifecycle_nodes}])

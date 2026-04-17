@@ -14,8 +14,11 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from ugv_interface.action import Behavior
 
-# Angular half-width of the front sector used for wall detection (degrees)
+from .lidar_scan_utils import process_scan_for_rover
+
+# Angular half-width of the LiDAR sectors used for wall detection (degrees)
 FRONT_HALF_ANGLE_DEG = 10.0
+RIGHT_HALF_ANGLE_DEG = 10.0
 
 # Iterative refinement: stop correcting when the residual error is below this
 ALIGN_THRESHOLD_DEG = 0.5
@@ -45,7 +48,7 @@ class AlignCtrl(Node):
         self._behavior_client = ActionClient(self, Behavior, 'behavior')
 
     def _scan_cb(self, msg):
-        self._scan = msg
+        self._scan = process_scan_for_rover(msg)
         self._scan_event.set()
 
     def align(self):
@@ -56,29 +59,47 @@ class AlignCtrl(Node):
             self._align_perpendicular()
 
     def _align_parallel(self):
-        """Spin the rover to be parallel to the wall in front (wall on the right)."""
+        """Spin the rover to be parallel to the wall.
+
+        The first correction uses the wall directly in front to get onto the
+        wall side. After the rover has turned, later iterations use wall points
+        on the right side to refine the heading.
+        """
         self.get_logger().info('Waiting for initial LiDAR scan...')
         self._scan_event.wait()
 
         for iteration in range(MAX_ALIGN_ITER):
-            wall_angle = self._measure_wall_angle_averaged()
+            if iteration == 0:
+                wall_angle = self._measure_wall_angle_averaged(0.0, FRONT_HALF_ANGLE_DEG)
+                sector_label = 'front'
+            else:
+                wall_angle = self._measure_wall_angle_averaged(-90.0, RIGHT_HALF_ANGLE_DEG)
+                sector_label = 'right'
+
             if wall_angle is None:
-                self.get_logger().error('Not enough wall points in front sector — aborting.')
+                self.get_logger().error(f'Not enough wall points in {sector_label} sector — aborting.')
                 return
 
-            # After rotating by `rot`, the wall centre (currently at roughly +x) ends up
-            # at (d·cos(rot), −d·sin(rot)).  For wall on the right: −d·sin(rot) < 0,
-            # i.e. sin(rot) > 0, so 0 < rot < π.  The wall line has two antipodal
-            # directions; pick the one that satisfies this constraint.
-            rot = wall_angle
-            if math.sin(rot) <= 0:
-                rot += math.pi
-            rot = (rot + math.pi) % (2 * math.pi) - math.pi
+            if iteration == 0:
+                # After rotating by `rot`, the wall centre (currently at roughly +x) ends up
+                # at (d·cos(rot), −d·sin(rot)). For wall on the right: −d·sin(rot) < 0,
+                # i.e. sin(rot) > 0, so 0 < rot < π. The wall line has two antipodal
+                # directions; pick the one that satisfies this constraint.
+                rot = wall_angle
+                if math.sin(rot) <= 0:
+                    rot += math.pi
+                rot = (rot + math.pi) % (2 * math.pi) - math.pi
+            else:
+                # Once the wall is on the right, align the rover with the wall axis.
+                # The wall direction is undirected, so choose the smallest equivalent
+                # correction in [-90°, +90°].
+                rot = (wall_angle + math.pi / 2) % math.pi - math.pi / 2
             rot_deg = math.degrees(rot)
 
             self.get_logger().info(
                 f'[iter {iteration + 1}/{MAX_ALIGN_ITER}] '
-                f'Wall angle: {math.degrees(wall_angle):.2f}°  →  correction: {rot_deg:.2f}° (parallel, wall on right)'
+                f'Wall angle: {math.degrees(wall_angle):.2f}°  →  correction: {rot_deg:.2f}° '
+                f'(parallel, sampled from {sector_label} sector)'
             )
 
             if abs(rot_deg) < ALIGN_THRESHOLD_DEG:
@@ -140,15 +161,16 @@ class AlignCtrl(Node):
         self._scan_event.wait()
         return self._scan
 
-    def _measure_wall_angle_averaged(self):
+    def _measure_wall_angle_averaged(self, center_deg: float = 0.0, half_deg: float = FRONT_HALF_ANGLE_DEG):
         """
         Collect NUM_SCANS_TO_AVG fresh scans and return a circular-mean wall
-        angle for noise reduction.  Returns None if there are never enough points.
+        angle for noise reduction from a specific LiDAR sector. Returns None
+        if there are never enough points.
         """
         angles = []
         for _ in range(NUM_SCANS_TO_AVG):
             scan = self._get_fresh_scan()
-            points = self._front_wall_points(scan)
+            points = self._sector_wall_points(scan, center_deg, half_deg)
             if len(points) >= 5:
                 angles.append(self._wall_angle(points))
         if not angles:
@@ -166,15 +188,17 @@ class AlignCtrl(Node):
         wall_dir = vt[0]
         return math.atan2(wall_dir[1], wall_dir[0])
 
-    def _front_wall_points(self, scan):
-        """Return (x, y) Cartesian points from the front ±FRONT_HALF_ANGLE_DEG sector."""
-        half_rad = math.radians(FRONT_HALF_ANGLE_DEG)
+    def _sector_wall_points(self, scan, center_deg: float, half_deg: float):
+        """Return (x, y) Cartesian points from a LiDAR sector centered at center_deg."""
+        center_rad = math.radians(center_deg)
+        half_rad = math.radians(half_deg)
         points = []
         for i, r in enumerate(scan.ranges):
             if not math.isfinite(r) or not (scan.range_min <= r <= scan.range_max):
                 continue
             angle = scan.angle_min + i * scan.angle_increment
-            if abs(angle) <= half_rad:
+            delta = (angle - center_rad + math.pi) % (2 * math.pi) - math.pi
+            if abs(delta) <= half_rad:
                 points.append((r * math.cos(angle), r * math.sin(angle)))
         return points
 

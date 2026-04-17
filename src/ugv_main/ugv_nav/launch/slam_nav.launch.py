@@ -112,7 +112,8 @@ def generate_launch_description():
             package='rclcpp_components',
             executable='component_container_isolated',
             parameters=[configured_params, {'autostart': autostart}],
-            arguments=['--ros-args', '--log-level', log_level],
+            arguments=['--ros-args', '--log-level', log_level,
+                       '--log-level', 'global_costmap.global_costmap:=warn'],
             remappings=remappings,
             output='screen'),
 

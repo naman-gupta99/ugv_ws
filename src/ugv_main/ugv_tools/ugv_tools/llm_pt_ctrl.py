@@ -55,7 +55,7 @@ class LlmPtCtrl(Node):
             
         self.publish_joint_state()
 
-        time.sleep(2.0)
+        time.sleep(4.0)
 
         return True
     

@@ -23,3 +23,7 @@ __pycache__/
 !src/ugv_else/ldlidar/ldlidar_driver/src/core/ldlidar_driver.cpp
 
 /venv
+.github/
+src/ugv_main/ugv_tools/ugv_tools/agent/.env
+src/ugv_main/ugv_tools/ugv_tools/agent/axiomatic-set-493419-v0-5934140da8ef.json
+tests/

@@ -1,7 +1,10 @@
 from langchain_core.tools import tool
 from typing import Any, Dict
+from dotenv import load_dotenv
 
-from .utilities.coord_convert import convert_coordinates_to_angles
+from .utilities.coord_convert import X_M_PER_UNIT, convert_coordinates_to_angles
+
+load_dotenv()
 
 
 class State:
@@ -55,7 +58,7 @@ class State:
         if self.update_rover_state_func:
             try:
                 dx = self.current_coordinates["x"] - self.path[-2]["x"]
-                result = self.update_rover_state_func(dx * 0.28, dy_rad)
+                result = self.update_rover_state_func(dx * X_M_PER_UNIT, dy_rad)
                 if result is False:
                     print(
                         "[audit_toolset] Warning: Timed out waiting for rover state update."

@@ -40,7 +40,7 @@ from .wall_centering import WallCenteringCtrl
 # ---------------------------------------------------------------------------
 INSPECTION_GOALS = [
     {'label': 'Waypoint 1', 'x': 2.8371, 'y': 2.9142, 'qz': 0.1, 'qw': 1.0},
-    {'label': 'Waypoint 2', 'x': 2.5260, 'y': -2.6412, 'qz': 0.1, 'qw': 1.0},
+    # {'label': 'Waypoint 2', 'x': 2.5260, 'y': -2.6412, 'qz': 0.1, 'qw': 1.0},
 ]
 
 
@@ -190,6 +190,14 @@ def _run_inspection_at_goal(goal: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def main(args=None):
+    debugpy_port = os.environ.get('UGV_DEBUGPY_PORT')
+    if debugpy_port:
+        import debugpy
+
+        debugpy.listen(('0.0.0.0', int(debugpy_port)))
+        print(f'Waiting for debugger attach on port {debugpy_port}...')
+        debugpy.wait_for_client()
+
     rclpy.init(args=args)
 
     total = len(INSPECTION_GOALS)
@@ -202,6 +210,8 @@ def main(args=None):
             # _wait_for_continue(f'Phase 7: LLM inspection at {label}')
 
         print('\nAll waypoints inspected.')
+        _wait_for_continue(f'Complete: All waypoints inspected')
+        
     except KeyboardInterrupt:
         print('\nPipeline interrupted by user.')
     finally:
