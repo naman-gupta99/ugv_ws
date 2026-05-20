@@ -31,6 +31,8 @@ setup(
             'align_ctrl = ugv_tools.align_ctrl:main',
             'distance_ctrl = ugv_tools.distance_ctrl:main',
             'inspection_pipeline = ugv_tools.inspection_pipeline:main',
+            'run_inspection = ugv_tools.run_inspection:main',
+            'ugv_model_smoke_test = ugv_tools.model_smoke_test:main',
         ],
     },
 )

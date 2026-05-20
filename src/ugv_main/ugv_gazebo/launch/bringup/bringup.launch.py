@@ -44,7 +44,7 @@ def generate_launch_description():
     world = os.path.join(
         get_package_share_directory('ugv_gazebo'),
         'worlds',
-        'ugv_world.world'
+        'ugv_world_window_obstacles.world'
     )
 
     # Include the gzserver launch file

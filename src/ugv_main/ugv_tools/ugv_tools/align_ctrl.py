@@ -23,7 +23,7 @@ RIGHT_HALF_ANGLE_DEG = 10.0
 # Iterative refinement: stop correcting when the residual error is below this
 ALIGN_THRESHOLD_DEG = 0.5
 # Maximum correction iterations before giving up
-MAX_ALIGN_ITER = 5
+MAX_ALIGN_ITER = 10
 # Number of consecutive scans to average for a stable wall-angle measurement
 NUM_SCANS_TO_AVG = 3
 # Calibrated time for a 90° spin — used to derive proportional waits
@@ -54,9 +54,9 @@ class AlignCtrl(Node):
     def align(self):
         """Dispatch to the selected alignment mode."""
         if self._mode == 'parallel':
-            self._align_parallel()
+            return self._align_parallel()
         else:
-            self._align_perpendicular()
+            return self._align_perpendicular()
 
     def _align_parallel(self):
         """Spin the rover to be parallel to the wall.
@@ -78,7 +78,7 @@ class AlignCtrl(Node):
 
             if wall_angle is None:
                 self.get_logger().error(f'Not enough wall points in {sector_label} sector — aborting.')
-                return
+                return False
 
             if iteration == 0:
                 # After rotating by `rot`, the wall centre (currently at roughly +x) ends up
@@ -106,16 +106,18 @@ class AlignCtrl(Node):
                 self.get_logger().info(
                     f'Residual error {abs(rot_deg):.2f}° < {ALIGN_THRESHOLD_DEG}° threshold — alignment complete.'
                 )
-                return
+                return True
 
             spin_wait_s = max(3.0, abs(rot_deg) / 90.0 * SPIN_90_S)
             self.get_logger().info(f'Spinning {rot_deg:.2f}° — waiting {spin_wait_s:.1f} s for physical completion.')
-            self._send_spin(rot_deg)
+            if not self._send_spin(rot_deg):
+                return False
             time.sleep(spin_wait_s)
 
         self.get_logger().warn(
             f'Reached max iterations ({MAX_ALIGN_ITER}) — alignment may have residual error.'
         )
+        return True
 
     def _align_perpendicular(self):
         """Spin the rover to face directly into the wall in front."""
@@ -126,7 +128,7 @@ class AlignCtrl(Node):
             wall_angle = self._measure_wall_angle_averaged()
             if wall_angle is None:
                 self.get_logger().error('Not enough wall points in front sector — aborting.')
-                return
+                return False
 
             # Rotate so the wall runs at ±90° in the new robot frame (left-right),
             # making the robot face the wall.  Two candidates; pick the smaller rotation.
@@ -144,16 +146,18 @@ class AlignCtrl(Node):
                 self.get_logger().info(
                     f'Residual error {abs(rot_deg):.2f}° < {ALIGN_THRESHOLD_DEG}° threshold — alignment complete.'
                 )
-                return
+                return True
 
             spin_wait_s = max(3.0, abs(rot_deg) / 90.0 * SPIN_90_S)
             self.get_logger().info(f'Spinning {rot_deg:.2f}° — waiting {spin_wait_s:.1f} s for physical completion.')
-            self._send_spin(rot_deg)
+            if not self._send_spin(rot_deg):
+                return False
             time.sleep(spin_wait_s)
 
         self.get_logger().warn(
             f'Reached max iterations ({MAX_ALIGN_ITER}) — alignment may have residual error.'
         )
+        return True
 
     def _get_fresh_scan(self):
         """Block until a new scan arrives (clears any cached scan first)."""
@@ -208,15 +212,28 @@ class AlignCtrl(Node):
         goal.command = json.dumps([{'type': 'spin', 'data': angle_deg}])
 
         done_event = threading.Event()
+        outcome = {'success': False, 'message': ''}
 
         def _result_cb(_):
+            result = _.result()
+            behavior_result = result.result
+            outcome['success'] = bool(getattr(behavior_result, 'result', False))
+            outcome['message'] = getattr(behavior_result, 'message', '')
             done_event.set()
 
         def _goal_cb(future):
-            future.result().get_result_async().add_done_callback(_result_cb)
+            handle = future.result()
+            if not handle.accepted:
+                outcome['message'] = 'Spin goal was rejected.'
+                done_event.set()
+                return
+            handle.get_result_async().add_done_callback(_result_cb)
 
         self._behavior_client.send_goal_async(goal).add_done_callback(_goal_cb)
         done_event.wait()
+        if not outcome['success']:
+            self.get_logger().warn(f'Spin behavior failed: {outcome["message"]}')
+        return outcome['success']
 
 
 def main(args=None):

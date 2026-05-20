@@ -33,12 +33,9 @@ SIDE_HALF_DEG   = 10.0 # ° — half-width for left/right clearance sectors
 
 # Exploration
 PROBE_STEP      = 0.1   # m — spacing between probe points during sweep
-POSITION_TOL    = 0.05  # m — acceptable error when moving to final position
+POSITION_TOL    = 0.10  # m — acceptable error when moving to final position
 SAFETY_MARGIN   = 0.3  # m — buffer kept from any obstacle when moving
-
-# behavior_ctrl drives at exactly this speed (must match behavior_ctrl.py)
-MOVE_SPEED_M_S  = 0.2   # m/s
-MOVE_SETTLE_S   = 1.0   # extra settle time after movement completes
+MAX_FINAL_ADJUST_ATTEMPTS = 8
 
 # Midpoint of search range: rover goes to the nearer endpoint first
 _SWEEP_MIDPOINT = (MIN_DISTANCE + MAX_DISTANCE) / 2.0  # 1.55 m
@@ -49,10 +46,13 @@ DETECT_API_URL        = 'http://127.0.0.1:8000/detect'
 PT_TILT_MIN_RAD       = -0.5   # tilt down limit
 PT_TILT_MAX_RAD       =  1.0   # tilt up limit
 PT_TILT_STEP_RAD      =  0.1
-PT_TILT_SETTLE_S      =  0.5
+PT_TILT_TOL_RAD       =  0.03
+PT_VEL_TOL_RAD_S      =  0.03
+PT_SETTLE_HOLD_S      =  0.20
+PT_SETTLE_TIMEOUT_S   =  3.0
 WINDOW_MIN_CONFIDENCE =  0.70
 EDGE_MARGIN_PX        =  20    # px clearance on all sides = "fully visible"
-X_M_PER_UNIT          =  1.1   # metres per llmptctrl grid unit (x axis)
+X_M_PER_UNIT          =  1.2   # metres per llmptctrl grid unit (x axis)
 Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
 
 
@@ -62,7 +62,16 @@ class DistanceCtrl(Node):
         super().__init__('distance_ctrl')
         self._scan = None
         self._scan_event = threading.Event()
+        self._joint_event = threading.Event()
+        self._pt_pan = None
+        self._pt_tilt = None
+        self._pt_pan_vel = 0.0
+        self._pt_tilt_vel = 0.0
+        self._last_joint_stamp = None
+        self._last_pan = None
+        self._last_tilt = None
         self.create_subscription(LaserScan, 'scan', self._scan_cb, 10)
+        self.create_subscription(JointState, '/joint_states', self._joint_cb, 10)
         self._behavior_client = ActionClient(self, Behavior, 'behavior')
         self._side_clearance_m = SIDE_CLEARANCE
 
@@ -95,6 +104,41 @@ class DistanceCtrl(Node):
         if self._camera_info is None:
             self._camera_info = msg
             self._camera_info_event.set()
+
+    def _joint_cb(self, msg: JointState) -> None:
+        try:
+            pan_idx = msg.name.index('pt_base_link_to_pt_link1')
+            tilt_idx = msg.name.index('pt_link1_to_pt_link2')
+        except ValueError:
+            return
+
+        pan = msg.position[pan_idx]
+        tilt = msg.position[tilt_idx]
+
+        pan_vel = None
+        tilt_vel = None
+        if len(msg.velocity) > pan_idx:
+            pan_vel = msg.velocity[pan_idx]
+        if len(msg.velocity) > tilt_idx:
+            tilt_vel = msg.velocity[tilt_idx]
+
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        if (pan_vel is None or tilt_vel is None) and self._last_joint_stamp is not None:
+            dt = stamp - self._last_joint_stamp
+            if dt > 1e-6 and self._last_pan is not None and self._last_tilt is not None:
+                if pan_vel is None:
+                    pan_vel = (pan - self._last_pan) / dt
+                if tilt_vel is None:
+                    tilt_vel = (tilt - self._last_tilt) / dt
+
+        self._pt_pan = pan
+        self._pt_tilt = tilt
+        self._pt_pan_vel = float(pan_vel) if pan_vel is not None else 0.0
+        self._pt_tilt_vel = float(tilt_vel) if tilt_vel is not None else 0.0
+        self._last_joint_stamp = stamp
+        self._last_pan = pan
+        self._last_tilt = tilt
+        self._joint_event.set()
 
     def _fresh_scan(self):
         """Wait for the next LiDAR scan and return it."""
@@ -213,6 +257,33 @@ class DistanceCtrl(Node):
         msg.position = [0.0, 0.0, 0.0, 0.0, 0.0, tilt_rad]
         self._joint_pub.publish(msg)
 
+    def _wait_pt_settle(self, target_tilt: float, timeout_s: float = PT_SETTLE_TIMEOUT_S) -> bool:
+        if not self._joint_event.wait(timeout=timeout_s):
+            self.get_logger().warn('No /joint_states data while waiting for pan-tilt settle.')
+            return False
+
+        start = time.monotonic()
+        settled_since = None
+        while time.monotonic() - start < timeout_s:
+            if self._pt_pan is None or self._pt_tilt is None:
+                time.sleep(0.02)
+                continue
+
+            target_ok = abs(self._pt_tilt - target_tilt) <= PT_TILT_TOL_RAD and abs(self._pt_pan) <= PT_TILT_TOL_RAD
+            vel_ok = abs(self._pt_pan_vel) <= PT_VEL_TOL_RAD_S and abs(self._pt_tilt_vel) <= PT_VEL_TOL_RAD_S
+            if target_ok and vel_ok:
+                if settled_since is None:
+                    settled_since = time.monotonic()
+                if time.monotonic() - settled_since >= PT_SETTLE_HOLD_S:
+                    return True
+            else:
+                settled_since = None
+
+            time.sleep(0.02)
+
+        self.get_logger().warn(f'Pan-tilt settle timeout at target tilt {target_tilt:+.2f} rad.')
+        return False
+
     def _is_window_fully_visible(self, detection: dict,
                                   image_width: int, image_height: int) -> bool:
         """True when the bounding box does not clip any image edge."""
@@ -300,7 +371,7 @@ class DistanceCtrl(Node):
         for tilt in tilt_positions:
             self.get_logger().info(f'  Tilt → {tilt:+.2f} rad')
             self._set_pt_tilt(tilt)
-            time.sleep(PT_TILT_SETTLE_S)
+            self._wait_pt_settle(tilt)
 
             try:
                 image_path = self._capture_image()
@@ -416,20 +487,84 @@ class DistanceCtrl(Node):
         self.get_logger().info(f'Moving {label} by {actual:.2f} m')
 
         done = threading.Event()
+        outcome = {'success': False, 'message': ''}
 
         def _result_cb(_):
+            result = _.result()
+            behavior_result = result.result
+            outcome['success'] = bool(getattr(behavior_result, 'result', False))
+            outcome['message'] = getattr(behavior_result, 'message', '')
             done.set()
 
         def _goal_cb(future):
-            future.result().get_result_async().add_done_callback(_result_cb)
+            handle = future.result()
+            if not handle.accepted:
+                outcome['message'] = f'Behavior goal for {cmd_type} was rejected.'
+                done.set()
+                return
+            handle.get_result_async().add_done_callback(_result_cb)
 
         self._behavior_client.send_goal_async(goal).add_done_callback(_goal_cb)
         done.wait()
-        # behavior_ctrl queues the command and returns the action result
-        # immediately (before movement starts).  Sleep long enough for the
-        # physical move to complete, then add a settle buffer.
-        time.sleep(actual / MOVE_SPEED_M_S + MOVE_SETTLE_S)
+        if not outcome['success']:
+            self.get_logger().warn(f'Behavior move failed: {outcome["message"]}')
+            return None
         return actual
+
+    def _measured_front_distance(self, context: str) -> float | None:
+        """Read and log the actual measured wall distance."""
+        distance = self.front_distance()
+        if distance is None:
+            self.get_logger().warn(f'Cannot read measured wall distance after {context}.')
+            return None
+        self.get_logger().info(f'Measured wall distance after {context}: {distance:.2f} m')
+        return distance
+
+    def _move_then_measure(self, toward_wall_m: float, context: str) -> float | None:
+        """Send a move command, then use LiDAR rather than the command as truth."""
+        commanded = self._send_move(toward_wall_m)
+        if commanded is None:
+            return None
+        self.get_logger().info(
+            f'Commanded {commanded:.2f} m for {context}; waiting for measured distance.'
+        )
+        return self._measured_front_distance(context)
+
+    def _move_to_measured_distance(
+        self,
+        target_distance: float,
+        tolerance: float,
+        reason: str,
+    ) -> float | None:
+        """
+        Iteratively command moves until the measured wall distance is close
+        enough to target_distance.  The behavior command is never treated as
+        the final position estimate.
+        """
+        current = self.front_distance()
+        if current is None:
+            self.get_logger().warn(f'Cannot read wall distance before {reason}.')
+            return None
+
+        for attempt in range(1, MAX_FINAL_ADJUST_ATTEMPTS + 1):
+            error = current - target_distance
+            self.get_logger().info(
+                f'{reason}: measured {current:.2f} m, target {target_distance:.2f} m, '
+                f'error {error:+.2f} m (tol {tolerance:.2f} m).'
+            )
+            if abs(error) <= tolerance:
+                return current
+
+            # Positive command drives toward the wall and reduces front distance.
+            current = self._move_then_measure(error, f'{reason} attempt {attempt}')
+            if current is None:
+                return None
+
+        self.get_logger().warn(
+            f'{reason}: stopped after {MAX_FINAL_ADJUST_ATTEMPTS} attempts at '
+            f'{current:.2f} m from wall (target {target_distance:.2f} m).'
+        )
+        return current
 
     # ------------------------------------------------------------------
     # Main exploration controller
@@ -437,20 +572,12 @@ class DistanceCtrl(Node):
 
     def find_accessible_distance(self):
         """
-        Explore [MIN_DISTANCE, MAX_DISTANCE] in a single continuous pass
-        (zero overlap) to find every accessible position, then move to
-        the one closest to IDEAL_DISTANCE.
+        Explore measured wall distances in [MIN_DISTANCE, MAX_DISTANCE].
 
-        Cases handled
-        -------------
-        1. d > MAX_DISTANCE (2.5 m) : approach wall until d == 2.5 m
-        2. MAX_DISTANCE ≥ d > IDEAL  : already in range, above ideal
-        3. IDEAL ≥ d > MIN_DISTANCE  : already in range, below ideal
-        4. d < MIN_DISTANCE (0.6 m)  : back away until d == 0.6 m
-
-        For cases 2–3 the sweep direction is chosen so the rover reaches
-        the nearer range endpoint first, giving the shortest total travel
-        with no revisited positions.
+        The rover still commands PROBE_STEP-sized moves, but the sweep never
+        assumes those moves are exact.  Each probe is recorded at the fresh
+        LiDAR distance measured at that stop, and the sweep ends only when the
+        measured distance crosses the min/max boundary.
 
         Returns the selected wall distance (float), or None if no
         accessible position was found.
@@ -462,20 +589,22 @@ class DistanceCtrl(Node):
             return None
         self.get_logger().info(f'Initial wall distance: {d:.2f} m')
 
-        # ── 2. Enter the search range [MIN, MAX] ───────────────────────
+        # ── 2. Enter the search range [MIN, MAX] using measured feedback ─
         if d > MAX_DISTANCE:
             # Case 1 — too far: drive toward wall to MAX_DISTANCE
             self.get_logger().info(
                 f'[Case 1] d={d:.2f} m > {MAX_DISTANCE} m — approaching wall.')
-            self._send_move(d - MAX_DISTANCE)
-            d = MAX_DISTANCE
+            d = self._move_then_measure(d - MAX_DISTANCE, 'enter search range at max boundary')
+            if d is None:
+                return None
 
         elif d < MIN_DISTANCE:
             # Case 4 — too close: back away to MIN_DISTANCE
             self.get_logger().info(
                 f'[Case 4] d={d:.2f} m < {MIN_DISTANCE} m — backing away.')
-            self._send_move(-(MIN_DISTANCE - d))
-            d = MIN_DISTANCE
+            d = self._move_then_measure(d - MIN_DISTANCE, 'enter search range at min boundary')
+            if d is None:
+                return None
 
         elif d > IDEAL_DISTANCE:
             self.get_logger().info(
@@ -484,7 +613,11 @@ class DistanceCtrl(Node):
             self.get_logger().info(
                 f'[Case 3] d={d:.2f} m in [{MIN_DISTANCE}, {IDEAL_DISTANCE}] — in range, below ideal.')
 
-        # d is now guaranteed ∈ [MIN_DISTANCE, MAX_DISTANCE]
+        if d < MIN_DISTANCE or d > MAX_DISTANCE:
+            self.get_logger().warn(
+                f'Could not enter search range exactly; measured {d:.2f} m. '
+                'Continuing sweep from measured position and recording only in-range probes.'
+            )
 
         # ── 3. Choose sweep direction for minimum-travel, zero-overlap ─
         #
@@ -506,108 +639,89 @@ class DistanceCtrl(Node):
             f'Sweep: {sweep_start:.1f} m → {sweep_end:.1f} m '
             f'(step {PROBE_STEP} m, {sweep_dir:+d} direction)')
 
-        # Move from current d to sweep start, checking clearance first.
-        # _send_move also clamps internally; this pre-check additionally
-        # caps sweep_start so _farthest_point is accurate.
-        delta_to_start = d - sweep_start   # >0 → toward wall, <0 → away
+        # Move once toward the sweep start, then trust only the measured
+        # distance.  Exploration does not fine-position at probe points.
+        if abs(d - sweep_start) > 1e-3:
+            current_d = self._move_then_measure(d - sweep_start, 'move to sweep start')
+            if current_d is None:
+                return None
+        else:
+            current_d = d
 
-        if delta_to_start > 0:
-            # Moving toward wall — verify front clearance.
-            front = self.front_distance()
-            if front is None:
-                self.get_logger().warn('Cannot read front distance — skipping forward move.')
-                delta_to_start = 0.0
-            else:
-                available_fwd = front - SAFETY_MARGIN
-                if available_fwd <= 0:
-                    self.get_logger().warn(
-                        f'Front blocked (clearance {front:.2f} m) — skipping forward move.')
-                    delta_to_start = 0.0
-                elif available_fwd < delta_to_start:
-                    # Can't reach sweep_start; go as far as safely possible
-                    sweep_start    = d - available_fwd
-                    delta_to_start = available_fwd
-                    self.get_logger().warn(
-                        f'Front clearance {front:.2f} m limits forward move to '
-                        f'{available_fwd:.2f} m — sweep starts at {sweep_start:.2f} m.')
-
-        elif delta_to_start < 0:
-            # Backing away from wall — verify rear clearance.
-            rear = self.rear_distance()
-            if rear is None:
-                self.get_logger().warn('Cannot read rear distance — skipping back-up.')
-                delta_to_start = 0.0
-            else:
-                available_back = rear - SAFETY_MARGIN
-                if available_back <= 0:
-                    self.get_logger().warn(
-                        f'Rear blocked (clearance {rear:.2f} m) — skipping back-up.')
-                    delta_to_start = 0.0
-                elif available_back < abs(delta_to_start):
-                    # Can't reach sweep_start; back up as far as safely possible
-                    sweep_start    = d + available_back
-                    delta_to_start = -available_back
-                    self.get_logger().warn(
-                        f'Rear clearance {rear:.2f} m limits back-up to '
-                        f'{available_back:.2f} m — sweep starts at {sweep_start:.2f} m.')
-
-        actual = self._send_move(delta_to_start)
-        current_d = d - math.copysign(actual, delta_to_start)
-
-        # ── 4. Single-pass sweep — probe every PROBE_STEP ─────────────
-        # For backward sweeps (sweep_dir=+1) also cap sweep_end so the total
-        # planned travel never exceeds the current rear clearance.
-        if sweep_dir == 1:
-            rear = self.rear_distance()
-            if rear is None or rear - SAFETY_MARGIN <= 0:
-                self.get_logger().warn(
-                    f'Rear clearance {rear} m too small — limiting sweep to current position.')
-                sweep_end = current_d
-            else:
-                available_rear = rear - SAFETY_MARGIN
-                max_safe_end   = current_d + available_rear
-                if max_safe_end < sweep_end:
-                    self.get_logger().warn(
-                        f'Rear clearance {rear:.2f} m caps backward sweep '
-                        f'to {max_safe_end:.2f} m (was {sweep_end:.2f} m).')
-                    sweep_end = max_safe_end
-
-        _farthest_point = max(sweep_start, sweep_end)
-        n_steps = int(round(abs(sweep_end - sweep_start) / PROBE_STEP))
+        # ── 4. Single-pass sweep — command 10 cm, record measured stops ─
         accessible_positions = []   # wall distances where rover is accessible
         _window_scan_done = False
+        probe_count = 0
+        max_probe_count = int(math.ceil((MAX_DISTANCE - MIN_DISTANCE) / PROBE_STEP)) + 10
 
-        for step_idx in range(n_steps + 1):
-            # Clamp to avoid floating-point overshoot at boundaries
-            probe_d = max(MIN_DISTANCE, min(MAX_DISTANCE, current_d))
+        while True:
+            current_d = self.front_distance()
+            if current_d is None:
+                self.get_logger().warn('Cannot read front distance during sweep — stopping.')
+                break
 
-            self.get_logger().info(f'Probing {probe_d:.2f} m ...')
-            if self.is_accessible():
-                accessible_positions.append(probe_d)
-                self.get_logger().info(f'  -> ACCESSIBLE at {probe_d:.2f} m')
-            else:
-                self.get_logger().info(f'  -> blocked at {probe_d:.2f} m')
-
-            # At the farthest probe point, scan for window grid coordinates.
-            if not _window_scan_done and abs(probe_d - _farthest_point) < PROBE_STEP / 2:
+            if current_d < MIN_DISTANCE or current_d > MAX_DISTANCE:
                 self.get_logger().info(
-                    f'At farthest probe point ({probe_d:.2f} m) — scanning for window coordinates.'
+                    f'Measured sweep boundary crossed at {current_d:.2f} m '
+                    f'outside [{MIN_DISTANCE:.2f}, {MAX_DISTANCE:.2f}] m — stopping.'
+                )
+                break
+
+            probe_d = current_d
+
+            # At the farthest measured probe point, scan for window grid coordinates
+            # before checking accessibility so is_accessible() uses the
+            # window-derived side-clearance threshold.
+            if not _window_scan_done and sweep_dir == -1 and probe_count == 0:
+                self.get_logger().info(
+                    f'At farthest measured probe point ({probe_d:.2f} m) — scanning for window coordinates.'
                 )
                 self._scan_for_window_coords()
                 _window_scan_done = True
 
-            # Advance to next probe point (skip after last step)
-            if step_idx < n_steps:
-                # sweep_dir +1 → distance increases → move away from wall → _send_move < 0
-                actual = self._send_move(-sweep_dir * PROBE_STEP)
-                if actual < PROBE_STEP - 1e-3:
-                    # Obstacle blocked the step — record where we stopped and abort sweep
-                    current_d += sweep_dir * actual
-                    self.get_logger().warn(
-                        f'Sweep blocked at {current_d:.2f} m after {step_idx + 1} probe(s) '
-                        f'— stopping early.')
-                    break
-                current_d += sweep_dir * actual
+            self.get_logger().info(f'Probing measured wall distance {probe_d:.2f} m ...')
+            if self.is_accessible():
+                accessible_positions.append(probe_d)
+                self.get_logger().info(f'  -> ACCESSIBLE recorded at measured {probe_d:.2f} m')
+            else:
+                self.get_logger().info(f'  -> blocked recorded at measured {probe_d:.2f} m')
+
+            if probe_count >= max_probe_count:
+                self.get_logger().warn('Sweep probe limit reached — stopping.')
+                break
+            probe_count += 1
+
+            # sweep_dir +1 -> distance increases -> move away from wall -> _send_move < 0
+            requested_move = -sweep_dir * PROBE_STEP
+            next_d = self._move_then_measure(
+                requested_move,
+                f'sweep step {probe_count} from measured {probe_d:.2f} m',
+            )
+            if next_d is None:
+                return None
+            if (
+                not _window_scan_done and
+                sweep_dir == 1 and
+                (next_d < MIN_DISTANCE or next_d > MAX_DISTANCE)
+            ):
+                self.get_logger().info(
+                    f'Last in-range measured probe was {probe_d:.2f} m before boundary '
+                    'crossing — scanning for window coordinates.'
+                )
+                self._scan_for_window_coords()
+                _window_scan_done = True
+            if abs(next_d - probe_d) < 1e-3:
+                self.get_logger().warn(
+                    f'Sweep command produced no measured distance change at {next_d:.2f} m — stopping.'
+                )
+                break
+
+        if not _window_scan_done and accessible_positions:
+            self.get_logger().info(
+                'Window coordinate scan was not triggered by a boundary condition; '
+                'scanning from current measured position.'
+            )
+            self._scan_for_window_coords()
 
         # ── 5. Select the accessible position closest to IDEAL_DISTANCE ─
         if not accessible_positions:
@@ -624,16 +738,16 @@ class DistanceCtrl(Node):
             f'[{len(accessible_positions)} accessible positions found]')
 
         # ── 6. Move to the chosen position ───────────────────────────
-        # Re-read actual position before final move to absorb any clamping drift
-        current_d = self.front_distance() or current_d
-        move_needed = current_d - best_d
-        if abs(move_needed) > POSITION_TOL:
-            self._send_move(move_needed)
-
-        final = self.front_distance()
+        final = self._move_to_measured_distance(
+            best_d,
+            POSITION_TOL,
+            'return to selected inspection distance',
+        )
+        if final is None:
+            return None
         self.get_logger().info(
             f'Positioned at {final:.2f} m from wall '
-            f'(target {best_d:.2f} m).')
+            f'(target {best_d:.2f} m, tolerance {POSITION_TOL:.2f} m).')
         return best_d
 
 

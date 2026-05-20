@@ -27,7 +27,7 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
         return current_angles
     
     if new_y == 0:
-        return 0, 0
+        return 0.0, 0.0
 
     dx, dy = new_x - curr_x, new_y - curr_y
     curr_x_rad, curr_y_rad = current_angles

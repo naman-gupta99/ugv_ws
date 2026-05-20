@@ -18,6 +18,7 @@ from typing import TypedDict, Annotated, Sequence
 
 from .audit_toolset import *
 from .models import Models
+from .hints import hints
 
 def system_message(content: str, flag: bool = False) -> BaseMessage:
     if flag:
@@ -31,10 +32,11 @@ class AgentState(TypedDict):
 
 
 class ValidationReactAgent:
-    def __init__(self):
+    def __init__(self, hint=""):
+        self.hint = hint
         
-        
-        self.prompt = """
+        hint_text = hints.get(hint, "") if hint else ""
+        self.prompt = f"""
         You are a rover navigation AI. Your mission is to visit **every integer grid point** inside the rectangular target area.
         
         
@@ -44,21 +46,29 @@ WORLD & GOAL:
   target_area = {{'x_min': <>, 'x_max': <>, 'y_min': <>, 'y_max': <>}}
   Visit every (x, y) where x_min ≤ x ≤ x_max and y_min ≤ y ≤ y_max.
 - mission_complete is True only after all required points have been visited.
+
+{"STRATEGY HINT:" + hint_text if hint_text else ""}
         
         """
         
         
         self.tools = [move_ahead, move_back, move_left, move_right]
-        self.model = Models().get_model("llama-3.3-70b").bind_tools(self.tools)
+        self.model_name = os.environ.get("UGV_AGENT_MODEL", "gemini-2.5-pro")
+        self.model = Models().get_model(self.model_name).bind_tools(self.tools)
 
         # Add memory to maintain conversation state
         self.memory = InMemorySaver()
 
         self.agent = self.build_agent()
 
+        self.thread_id = f"audit_simple_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.config = {
             "configurable": {
-                "thread_id": f"audit_simple_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                "thread_id": self.thread_id,
+            },
+            "metadata": {
+                "ugv_agent_thread_id": self.thread_id,
+                "ugv_model_name": self.model_name,
             },
             "recursion_limit": 200,
         }
@@ -83,11 +93,15 @@ WORLD & GOAL:
 
             # Outcomes
             "missions_completed": 0,
+            "pictures_taken": 0,
 
             # Time
             "start_time": None,
             "end_time": None,
             "duration_sec": None,
+            
+            # Hint used
+            "hint_used": hint,
         }
 
     def build_agent(self):
@@ -231,13 +245,6 @@ CRITICAL INSTRUCTIONS:
 2) These functions take NO parameters.
 3) Plan your path efficiently to cover the entire rectangle.
    IMPORTANT: x moves (left/right) are expensive — minimize them. y moves (up/down) are cheap — maximize them.
-   Hint: A column-by-column serpentine sweep keeps x changes to a minimum:
-     - If not at (x_min, y_min), first navigate there.
-     - For x from x_min to x_max (inclusive):
-         - Sweep bottom→top on even columns ((x - x_min) % 2 == 0): move up (y+1) until y == y_max.
-         - Sweep top→bottom on odd columns: move down (y-1) until y == y_min.
-         - Only after fully sweeping the current column, step right once (x+1) to the next column.
-     - Never move right/left in the middle of a column sweep; finish the entire column first.
 4) After each move, read the returned state to track progress.
 5) STOP when mission_complete == true. If complete, do not call any tool.
 6) Make sure to reason about the next best move based on current position and remaining points.
@@ -327,4 +334,4 @@ Your response MUST include exactly one tool call in the correct format (unless m
 
         # Outcome
         print(f"Missions completed (this run): {m['missions_completed']}")
-
+        print(f"Pictures taken: {m.get('pictures_taken', 0)}")

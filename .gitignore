@@ -26,4 +26,5 @@ __pycache__/
 .github/
 src/ugv_main/ugv_tools/ugv_tools/agent/.env
 src/ugv_main/ugv_tools/ugv_tools/agent/axiomatic-set-493419-v0-5934140da8ef.json
+src/ugv_main/ugv_tools/ugv_tools/agent/artful-striker-496015-t7-1823659a5a52.json
 tests/

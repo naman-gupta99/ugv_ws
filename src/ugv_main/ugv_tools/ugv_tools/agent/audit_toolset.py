@@ -17,14 +17,17 @@ class State:
         return goals
 
     def __init__(self):
-        self.current_coordinates = {"x": 0, "y": 0}
-        self.target_area = {"x_min": -1, "x_max": 1, "y_min": 2, "y_max": 3}
-        self.remaining_coordinates = self.__generate_goal_coordinates()
-        self.path = [{"x": 0, "y": 0}]
         self.update_rover_state_func = None
         self.get_laser_scan_func = None
         self.get_current_angles_func = None
         self.capture_image_func = None
+        self.reset()
+
+    def reset(self):
+        self.current_coordinates = {"x": 0, "y": 0}
+        self.target_area = {"x_min": -1, "x_max": 1, "y_min": 2, "y_max": 3}
+        self.remaining_coordinates = self.__generate_goal_coordinates()
+        self.path = [{"x": 0, "y": 0}]
 
     def move_ahead(self):
         self.current_coordinates["y"] += 1
@@ -57,14 +60,16 @@ class State:
         )
         if self.update_rover_state_func:
             try:
-                dx = self.current_coordinates["x"] - self.path[-2]["x"]
+                dx = self.path[-2]["x"] - self.current_coordinates["x"] 
                 result = self.update_rover_state_func(dx * X_M_PER_UNIT, dy_rad)
-                if result is False:
+                # Only capture after an explicit success from the rover update call.
+                if result is not True:
                     print(
-                        "[audit_toolset] Warning: Timed out waiting for rover state update."
+                        f"[audit_toolset] Warning: Rover state update did not complete successfully (result={result!r})."
                     )
                     return
-                self.capture_image_func()
+                if self.capture_image_func:
+                    self.capture_image_func()
             except Exception as exc:
                 print(f"[audit_toolset] Error while updating rover state: {exc}")
         else:

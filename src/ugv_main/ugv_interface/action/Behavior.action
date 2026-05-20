@@ -2,7 +2,15 @@ string command
 
 ---
 bool result
+string message
 
 ---
 bool feedback
+string command_type
+float32 target_value
+float32 current_value
+float32 progress
+float32 linear_velocity
+float32 angular_velocity
+bool is_settled
 
