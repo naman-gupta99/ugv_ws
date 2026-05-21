@@ -126,6 +126,13 @@ private:
     // Callback to handle raw odometry data and update position/velocity
     void handle_odom(const std::shared_ptr<std_msgs::msg::Float32MultiArray> msg)
     {
+        if (msg->data.size() < 2)
+        {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                 "Ignoring odom/odom_raw with fewer than 2 values");
+            return;
+        }
+
         rclcpp::Time curren_time = rclcpp::Clock().now();
 
         float now_odl = msg->data.at(0);  // Left wheel odometry
@@ -136,7 +143,11 @@ private:
         {
             init_odl = now_odl;
             init_odr = now_odr;
+            pre_odl = 0.0;
+            pre_odr = 0.0;
+            last_time_ = curren_time;
             is_initialized = true;
+            return;
         }
 
         // Adjust odometry readings by subtracting the initial values
@@ -146,6 +157,10 @@ private:
         // Calculate time delta
         dt = (curren_time - last_time_).seconds();
         last_time_ = curren_time;
+        if (dt <= 0.0)
+        {
+            return;
+        }
 
         // Compute distance traveled by each wheel
         float dleft = now_odl - pre_odl;
