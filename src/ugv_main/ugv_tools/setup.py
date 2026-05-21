@@ -31,6 +31,7 @@ setup(
             'align_ctrl = ugv_tools.align_ctrl:main',
             'distance_ctrl = ugv_tools.distance_ctrl:main',
             'inspection_pipeline = ugv_tools.inspection_pipeline:main',
+            'left_power_compensation_tuner = ugv_tools.left_power_compensation_tuner:main',
             'run_inspection = ugv_tools.run_inspection:main',
             'ugv_model_smoke_test = ugv_tools.model_smoke_test:main',
             'rear_left_motor_test = ugv_tools.rear_left_motor_test:main',
