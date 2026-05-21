@@ -786,7 +786,8 @@ def main(args=None):
             _write_metrics_row(metrics_row)
             print(f'Metrics written to {METRICS_CSV_PATH}')
         finally:
-            rclpy.shutdown()
+            if rclpy.ok():
+                rclpy.shutdown()
 
 
 if __name__ == '__main__':

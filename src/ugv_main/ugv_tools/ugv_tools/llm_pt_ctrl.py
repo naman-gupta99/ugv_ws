@@ -51,6 +51,16 @@ class LlmPtCtrl(Node):
             command_type = 'drive_on_heading' if dx > 0 else 'back_up'
             goal = Behavior.Goal()
             goal.command = json.dumps([{'type': command_type, 'data': abs(dx)}])
+            behavior_server_timeout_s = float(os.getenv("UGV_BEHAVIOR_SERVER_TIMEOUT", "15"))
+
+            if not self._behavior_client.wait_for_server(timeout_sec=behavior_server_timeout_s):
+                self.motion_failed_reason = (
+                    f"Behavior action server /behavior was not available within "
+                    f"{behavior_server_timeout_s:.1f}s."
+                )
+                self.motion_failed_event.set()
+                self.get_logger().warn(self.motion_failed_reason)
+                return False
 
             done_event = threading.Event()
             outcome = {'success': False, 'message': ''}
@@ -372,6 +382,8 @@ class LlmPtCtrl(Node):
             self.validation_agent.metrics["pictures_taken"] = self.pictures_taken
 
     def publish_joint_state(self):
+        if not rclpy.ok():
+            return
         try:
 
             x_rad = self.x_rad
@@ -396,7 +408,8 @@ class LlmPtCtrl(Node):
 
             self.pub_cmdJoint.publish(joint_state)
         except Exception as exc:
-            self.get_logger().error(f"Failed to publish joint state: {exc}")
+            if rclpy.ok():
+                self.get_logger().error(f"Failed to publish joint state: {exc}")
 
     def _run_validation_agent(self):
         try:
@@ -503,8 +516,9 @@ class LlmPtCtrl(Node):
     def on_shutdown(self):
         self.y_rad = 0.0
         self.x_rad = 0.0
-        self.publish_joint_state()
-        self.get_logger().info("Shutting down LlmPtCtrl node.")
+        if rclpy.ok():
+            self.publish_joint_state()
+            self.get_logger().info("Shutting down LlmPtCtrl node.")
 
 
 def main(args=None):
@@ -519,7 +533,8 @@ def main(args=None):
     finally:
         pt_ctrl.on_shutdown()
         pt_ctrl.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

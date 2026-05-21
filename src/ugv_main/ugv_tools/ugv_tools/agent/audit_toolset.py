@@ -68,7 +68,7 @@ class State:
         )
         if self.update_rover_state_func:
             try:
-                dx = self.path[-2]["x"] - self.current_coordinates["x"] 
+                dx = self.path[-2]["x"] - self.current_coordinates["x"]
                 result = self.update_rover_state_func(dx * X_M_PER_UNIT, dy_rad)
                 # Only capture after an explicit success from the rover update call.
                 if result is not True:
