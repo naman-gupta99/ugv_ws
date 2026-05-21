@@ -1,5 +1,21 @@
 # ugv_ws Workspace Description (Stable)
 
+## 🚨🚨🚨 CRITICAL ROVER SAFETY WARNING 🚨🚨🚨
+
+# DO NOT USE THE LEFT-SIDE PWM COMPENSATION AS A REAL FIX.
+
+# DO NOT USE THIS COMPENSATION FOR NORMAL OPERATION.
+
+# DO NOT USE THIS COMPENSATION FOR AUTONOMOUS NAVIGATION.
+
+# DO NOT USE THIS COMPENSATION AROUND PEOPLE, PETS, OBSTACLES, STAIRS, OR ANYTHING BREAKABLE.
+
+The current `ugv_driver.py` contains an emergency diagnostic workaround that adds extra PWM power to the left side of the rover (`UGV_LEFT_PWM_COMPENSATION`, currently calibrated to `15`). This was added only because the rear-left wheel/motor was observed not moving correctly during hardware testing.
+
+This compensation can hide a real mechanical, wiring, motor, gearbox, motor-driver, or firmware-channel fault. It can also make the rover behave unpredictably, especially when turning, reversing, navigating autonomously, or driving on different surfaces.
+
+The correct fix is to repair the rear-left motor/channel problem. Remove this workaround after the hardware is fixed.
+
 1.Environment
 
 - pc software：VMware Workstation 17Pro、mobarxterm

@@ -15,6 +15,23 @@ import os
 # Initialize serial communication with the UGV
 ser = serial.Serial('/dev/ttyAMA0', 115200, timeout=1)
 
+LEFT_PWM_COMPENSATION = int(os.getenv('UGV_LEFT_PWM_COMPENSATION', '15'))
+PWM_PER_MPS = float(os.getenv('UGV_PWM_PER_MPS', '400.0'))
+WHEEL_TRACK_M = float(os.getenv('UGV_WHEEL_TRACK_M', '0.175'))
+MAX_PWM = int(os.getenv('UGV_MAX_PWM', '255'))
+
+
+def clamp_pwm(value):
+    return max(-MAX_PWM, min(MAX_PWM, int(round(value))))
+
+
+def apply_compensation(pwm, compensation):
+    if pwm > 0:
+        return pwm + compensation
+    if pwm < 0:
+        return pwm - compensation
+    return 0
+
 class UgvDriver(Node):
     def __init__(self, name):
         super().__init__(name)
@@ -53,8 +70,18 @@ class UgvDriver(Node):
             elif -0.2 < angular_velocity < 0:
                 angular_velocity = -0.2
 
-        # Send the velocity data to the UGV as a JSON string
-        data = json.dumps({'T': '13', 'X': linear_velocity, 'Z': angular_velocity}) + "\n"
+        left_velocity = linear_velocity - angular_velocity * WHEEL_TRACK_M / 2.0
+        right_velocity = linear_velocity + angular_velocity * WHEEL_TRACK_M / 2.0
+
+        left_pwm = apply_compensation(clamp_pwm(left_velocity * PWM_PER_MPS), LEFT_PWM_COMPENSATION)
+        right_pwm = clamp_pwm(right_velocity * PWM_PER_MPS)
+
+        # Send compensated left/right PWM to the UGV as a JSON string.
+        data = json.dumps({
+            'T': 11,
+            'L': clamp_pwm(left_pwm),
+            'R': right_pwm,
+        }) + "\n"
         ser.write(data.encode())
 
     # Callback for processing joint state updates
