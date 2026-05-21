@@ -13,51 +13,28 @@ fi
 
 export PYTHONPATH="${WORKSPACE_DIR}/src/ugv_main/ugv_tools:${PYTHONPATH:-}"
 
-mapfile -t MODELS < <(
-  python3 - <<'PY'
-from ugv_tools.agent.models import Models
-
-for model_name in Models().available_model_names():
-    print(model_name)
-PY
+RUNS=(
+  "gemini-2.5-pro|easy"
 )
 
-mapfile -t HINTS < <(
-  python3 - <<'PY'
-from ugv_tools.agent.hints import hints
-
-for hint_name in hints.keys():
-    print(hint_name)
-PY
+MODELS=(
+  "gemini-2.5-pro"
 )
 
-if [[ "${#MODELS[@]}" -eq 0 ]]; then
-  echo "No models found in ugv_tools.agent.models.Models." >&2
-  exit 1
-fi
-
-echo "Testing ${#MODELS[@]} inspection model(s) before starting ROS runs..."
+echo "Testing ${#MODELS[@]} selected inspection model(s) before starting ROS runs..."
 python3 -m ugv_tools.model_smoke_test "${MODELS[@]}"
 
 echo
-echo "Starting inspection loop with ${#HINTS[@]} hint(s)..."
-for model_name in "${MODELS[@]}"; do
-  if [[ "${model_name}" == "greedy" ]]; then
-    echo
-    echo "============================================================"
-    echo "Running inspection with model: ${model_name}, hint: <none>"
-    echo "============================================================"
-    UGV_AGENT_MODEL="${model_name}" UGV_AGENT_HINT="" python3 -m ugv_tools.run_inspection --no-debug --model "${model_name}" --hint ""
-    continue
-  fi
+echo "Starting inspection loop with ${#RUNS[@]} selected run(s)..."
+for run in "${RUNS[@]}"; do
+  IFS='|' read -r model_name hint_name <<< "${run}"
+  hint_label="${hint_name:-<none>}"
 
-  for hint_name in "${HINTS[@]}"; do
-    echo
-    echo "============================================================"
-    echo "Running inspection with model: ${model_name}, hint: ${hint_name}"
-    echo "============================================================"
-    UGV_AGENT_MODEL="${model_name}" UGV_AGENT_HINT="${hint_name}" python3 -m ugv_tools.run_inspection --no-debug --model "${model_name}" --hint "${hint_name}"
-  done
+  echo
+  echo "============================================================"
+  echo "Running inspection with model: ${model_name}, hint: ${hint_label}"
+  echo "============================================================"
+  UGV_AGENT_MODEL="${model_name}" UGV_AGENT_HINT="${hint_name}" python3 -m ugv_tools.run_inspection --no-debug --model "${model_name}" --hint "${hint_name}"
 done
 
 echo

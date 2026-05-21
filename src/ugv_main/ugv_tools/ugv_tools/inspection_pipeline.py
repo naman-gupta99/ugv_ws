@@ -358,6 +358,7 @@ def _run_inspection_at_goal(goal: dict) -> dict:
     centering_node = WallCenteringCtrl()
     try:
         if not _run_phase(centering_node, centering_node.run, startup_delay=1.0):
+            goal_metrics['failure_reason'] = 'No qualifying window found during wall centering.'
             return goal_metrics
     finally:
         _record_phase_duration(goal_metrics, 3, phase_start)

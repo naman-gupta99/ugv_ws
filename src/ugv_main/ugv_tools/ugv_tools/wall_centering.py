@@ -426,7 +426,7 @@ class WallCenteringCtrl(Node):
           5. Reset the pan-tilt to 0° after the shift.
 
         Returns:
-            True  — rover is centred (or was already, or no detections).
+            True  — rover is centred or was already centred.
             False — a required sensor/API was unavailable.
         """
         self.get_logger().info('Waiting for camera info...')
@@ -442,7 +442,7 @@ class WallCenteringCtrl(Node):
         if detection is None:
             self.get_logger().warn('No qualifying window found during scan — skipping lateral shift.')
             self._set_pt_tilt(0.0)
-            return True   # Not a hard failure; proceed to Phase 3.
+            return False
 
         self.get_logger().info(
             f'Using detection: label={detection["label"]}  '

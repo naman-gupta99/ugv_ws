@@ -72,7 +72,7 @@
     </scene>
     <gui fullscreen='0'>
       <camera name='user_camera'>
-        <pose>-0.663278 0.277804 22.1817 0 1.4698 -0.101048</pose>
+        <pose>1.49217 -1.6626 10.5706 0 1.4178 -0.089048</pose>
         <view_controller>orbit</view_controller>
         <projection_type>perspective</projection_type>
       </camera>
@@ -97,6 +97,44 @@
         </constraints>
       </ode>
     </physics>
+    <model name='kitchen_sink'>
+      <pose>2.4 -2.4 0 0 -0 1.5708</pose>
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/KitchenSink/meshes/kitchenSink.obj</uri>
+              <scale>1.04037 1.04037 1.04037</scale>
+            </mesh>
+          </geometry>
+        </visual>
+        <collision name='collision'>
+          <geometry>
+            <mesh>
+              <uri>file:///home/ws/ugv_ws/src/ugv_main/ugv_gazebo/models/KitchenSink/meshes/kitchenSink.obj</uri>
+              <scale>1.04037 1.04037 1.04037</scale>
+            </mesh>
+          </geometry>
+          <max_contacts>10</max_contacts>
+          <surface>
+            <contact>
+              <ode/>
+            </contact>
+            <bounce/>
+            <friction>
+              <torsional>
+                <ode/>
+              </torsional>
+              <ode/>
+            </friction>
+          </surface>
+        </collision>
+        <self_collide>0</self_collide>
+        <enable_wind>0</enable_wind>
+        <kinematic>0</kinematic>
+      </link>
+    </model>
     <model name='world'>
       <static>1</static>
       <frame name='world::__model__' attached_to='world::Wall_81'>
@@ -2665,7 +2703,7 @@
           <geometry>
             <mesh>
               <uri>model://DINNING_ROOM_FURNITURE_SET_1/meshes/model.obj</uri>
-              <scale>10.1017 10.1017 10.1017</scale>
+              <scale>7.92567 7.92567 7.92567</scale>
             </mesh>
           </geometry>
         </visual>
@@ -2673,7 +2711,7 @@
           <geometry>
             <mesh>
               <uri>model://DINNING_ROOM_FURNITURE_SET_1/meshes/model.obj</uri>
-              <scale>10.1017 10.1017 10.1017</scale>
+              <scale>7.92567 7.92567 7.92567</scale>
             </mesh>
           </geometry>
           <max_contacts>10</max_contacts>
@@ -2736,10 +2774,10 @@
       </link>
     </model>
     <state world_name='default'>
-      <sim_time>1611 561000000</sim_time>
-      <real_time>70 601887823</real_time>
-      <wall_time>1779323008 385780884</wall_time>
-      <iterations>70170</iterations>
+      <sim_time>2294 865000000</sim_time>
+      <real_time>176 713152441</real_time>
+      <wall_time>1779335090 501647419</wall_time>
+      <iterations>175101</iterations>
       <model name='cabinet'>
         <pose>4.639 4.31958 0 0 -0 0</pose>
         <scale>1 1 1</scale>
@@ -2771,20 +2809,20 @@
         </link>
       </model>
       <model name='digital_camo_double_decker_lunch_bag'>
-        <pose>4.09059 4.20905 0.000205 0 -0 0.370008</pose>
+        <pose>4.15548 3.1754 0.000205 0 -0 0.370008</pose>
         <scale>1.66211 1.66211 1.66211</scale>
         <link name='link_0'>
-          <pose>4.09059 4.20905 0.000205 0 -0 0.370008</pose>
+          <pose>4.15548 3.1754 0.000205 0 -0 0.370008</pose>
           <velocity>0 0 0 0 -0 0</velocity>
           <acceleration>0 0 0 0 -0 0</acceleration>
           <wrench>0 0 0 0 -0 0</wrench>
         </link>
       </model>
       <model name='dinning_room_furniture_set_1'>
-        <pose>3.15389 -2.36926 0 0 -0 1.57888</pose>
-        <scale>10.1017 10.1017 10.1017</scale>
+        <pose>2.96979 -1.35622 0 0 -0 1.57888</pose>
+        <scale>7.92567 7.92567 7.92567</scale>
         <link name='link_0'>
-          <pose>3.15389 -2.36926 0 0 -0 1.57888</pose>
+          <pose>2.96979 -1.35622 0 0 -0 1.57888</pose>
           <velocity>0 0 0 0 -0 0</velocity>
           <acceleration>0 0 0 0 -0 0</acceleration>
           <wrench>0 0 0 0 -0 0</wrench>
@@ -2821,6 +2859,16 @@
         <scale>10.4942 10.4942 10.4942</scale>
         <link name='link_0'>
           <pose>4.07373 -4.35147 -0.000637 0.00483 -0.008117 -1.57546</pose>
+          <velocity>0 0 0 0 -0 0</velocity>
+          <acceleration>0 0 0 0 -0 0</acceleration>
+          <wrench>0 0 0 0 -0 0</wrench>
+        </link>
+      </model>
+      <model name='kitchen_sink'>
+        <pose>4.06621 -3.75525 0 0 0 -1.56468</pose>
+        <scale>1.04037 1.04037 1.04037</scale>
+        <link name='link'>
+          <pose>4.06621 -3.75525 0 0 0 -1.56468</pose>
           <velocity>0 0 0 0 -0 0</velocity>
           <acceleration>0 0 0 0 -0 0</acceleration>
           <wrench>0 0 0 0 -0 0</wrench>
