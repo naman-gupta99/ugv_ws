@@ -32,6 +32,7 @@ from rclpy.executors import SingleThreadedExecutor
 
 from .align_ctrl import AlignCtrl
 from .distance_ctrl import DistanceCtrl, POSITION_TOL, audit_state_instance
+from . import llm_pt_ctrl as llm_pt_ctrl_module
 from .llm_pt_ctrl import LlmPtCtrl
 from .nav_ctrl import NavCtrl
 from .wall_centering import WallCenteringCtrl
@@ -556,6 +557,114 @@ def _run_inspection_at_goal(goal: dict) -> dict:
     return goal_metrics
 
 
+def _env_int(*names: str, default=None) -> int:
+    for name in names:
+        value = os.environ.get(name)
+        if value not in (None, ''):
+            try:
+                return int(value)
+            except ValueError as exc:
+                raise ValueError(f'{name} must be an integer, got {value!r}') from exc
+    if default is not None:
+        return int(default)
+    raise ValueError(f'Missing required environment variable: one of {", ".join(names)}')
+
+
+def _rover_camera_only_target_area() -> dict:
+    target_area = {
+        'x_min': _env_int('UGV_CAMERA_ONLY_X_MIN', 'UGV_ROVER_CAMERA_ONLY_X_MIN', 'X_MIN'),
+        'x_max': _env_int(
+            'UGV_CAMERA_ONLY_X_MAX',
+            'UGV_CAMERA_ONLY_X_MX',
+            'UGV_ROVER_CAMERA_ONLY_X_MAX',
+            'UGV_ROVER_CAMERA_ONLY_X_MX',
+            'X_MAX',
+            'X_MX',
+        ),
+        'y_min': _env_int('UGV_CAMERA_ONLY_Y_MIN', 'UGV_ROVER_CAMERA_ONLY_Y_MIN', 'Y_MIN'),
+        'y_max': _env_int('UGV_CAMERA_ONLY_Y_MAX', 'UGV_ROVER_CAMERA_ONLY_Y_MAX', 'Y_MAX'),
+    }
+    if target_area['x_min'] > target_area['x_max']:
+        raise ValueError(f"x_min must be <= x_max: {target_area['x_min']} > {target_area['x_max']}")
+    if target_area['y_min'] > target_area['y_max']:
+        raise ValueError(f"y_min must be <= y_max: {target_area['y_min']} > {target_area['y_max']}")
+    return target_area
+
+
+def _run_llm_pt_ctrl_segment(target_area: dict, distance=None) -> dict:
+    audit_state_instance.reset()
+    audit_state_instance.configure_target_area(target_area)
+
+    print(
+        '  [ROVER_CAMERA_ONLY] Running LLM pan-tilt inspection with '
+        f"x=[{target_area['x_min']},{target_area['x_max']}] "
+        f"y=[{target_area['y_min']},{target_area['y_max']}]"
+    )
+
+    phase_7_start_monotonic = time.monotonic()
+    phase_7_start_dt = _utc_now()
+    pt_ctrl = LlmPtCtrl('llm_pt_ctrl')
+    capture_folder = os.path.basename(pt_ctrl._run_dir)
+    executor = SingleThreadedExecutor()
+    executor.add_node(pt_ctrl)
+    try:
+        while pt_ctrl.validation_agent_thread.is_alive():
+            if pt_ctrl.motion_failed_event.is_set():
+                pt_ctrl.get_logger().warn(
+                    f'LLM inspection motion failed: {pt_ctrl.motion_failed_reason}.'
+                )
+                break
+            executor.spin_once(timeout_sec=0.1)
+    except KeyboardInterrupt:
+        raise
+    finally:
+        phase_7_end_dt = _utc_now()
+        langsmith_usage = _collect_langsmith_usage(
+            phase_7_start_dt,
+            phase_7_end_dt,
+            thread_id=pt_ctrl.validation_agent_thread_id,
+        )
+        metrics = {
+            'label': 'ROVER_CAMERA_ONLY',
+            'success': not pt_ctrl.motion_failed_event.is_set(),
+            'failure_reason': pt_ctrl.motion_failed_reason or '',
+            'capture_folder': capture_folder,
+            'phase_durations_sec': {'phase_7': round(time.monotonic() - phase_7_start_monotonic, 3)},
+            'agent_metrics': {
+                'segments': [{
+                    'distance': distance,
+                    'x_values': list(range(target_area['x_min'], target_area['x_max'] + 1)),
+                    'target_area': target_area,
+                    'capture_folder': capture_folder,
+                    'agent_metrics': pt_ctrl.validation_agent_metrics or {},
+                    'llm_used': pt_ctrl.validation_agent_model_name or '',
+                    'pictures_taken': pt_ctrl.pictures_taken,
+                    'langsmith_usage': langsmith_usage,
+                }],
+                'pictures_taken': pt_ctrl.pictures_taken,
+                'missions_completed': int(
+                    bool((pt_ctrl.validation_agent_metrics or {}).get('missions_completed', 0))
+                ),
+            },
+            'langsmith_usage': langsmith_usage,
+            'llm_used': pt_ctrl.validation_agent_model_name or '',
+            'pictures_taken': pt_ctrl.pictures_taken,
+        }
+        executor.remove_node(pt_ctrl)
+        pt_ctrl.on_shutdown()
+        pt_ctrl.destroy_node()
+
+    return metrics
+
+
+def _run_rover_camera_only() -> list[dict]:
+    os.environ['UGV_PLATFORM'] = 'ROVER'
+    os.environ['PLATFORM'] = 'ROVER'
+    llm_pt_ctrl_module.PLATFORM = 'ROVER'
+    target_area = _rover_camera_only_target_area()
+    return [_run_llm_pt_ctrl_segment(target_area)]
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -587,20 +696,30 @@ def main(args=None):
 
     rclpy.init(args=args)
 
-    total = len(INSPECTION_GOALS)
+    mode = os.environ.get('UGV_INSPECTION_MODE', '').upper()
+    total = 1 if mode == 'ROVER_CAMERA_ONLY' else len(INSPECTION_GOALS)
     inspection_start = time.monotonic()
     goal_results = []
     try:
-        for i, goal in enumerate(INSPECTION_GOALS):
-            label = goal.get('label', f"({goal['x']:.2f}, {goal['y']:.2f})")
-            print(f'\n[{i + 1}/{total}] Starting inspection at: {label}')
-            goal_result = _run_inspection_at_goal(goal)
-            goal_results.append(goal_result)
-            if goal_result.get('success'):
-                print(f'[{i + 1}/{total}] Inspection complete at: {label}')
+        if mode == 'ROVER_CAMERA_ONLY':
+            print('\n[1/1] Starting ROVER_CAMERA_ONLY inspection')
+            goal_results = _run_rover_camera_only()
+            if goal_results[0].get('success'):
+                print('[1/1] ROVER_CAMERA_ONLY inspection complete.')
             else:
-                reason = goal_result.get('failure_reason') or 'goal failed'
-                print(f'[{i + 1}/{total}] Inspection failed at: {label} — {reason}. Continuing to next waypoint.')
+                reason = goal_results[0].get('failure_reason') or 'LLMPt_ctrl failed'
+                print(f'[1/1] ROVER_CAMERA_ONLY inspection failed: {reason}.')
+        else:
+            for i, goal in enumerate(INSPECTION_GOALS):
+                label = goal.get('label', f"({goal['x']:.2f}, {goal['y']:.2f})")
+                print(f'\n[{i + 1}/{total}] Starting inspection at: {label}')
+                goal_result = _run_inspection_at_goal(goal)
+                goal_results.append(goal_result)
+                if goal_result.get('success'):
+                    print(f'[{i + 1}/{total}] Inspection complete at: {label}')
+                else:
+                    reason = goal_result.get('failure_reason') or 'goal failed'
+                    print(f'[{i + 1}/{total}] Inspection failed at: {label} — {reason}. Continuing to next waypoint.')
             # _wait_for_continue(f'Phase 7: LLM inspection at {label}')
 
         successful_goals = sum(1 for result in goal_results if result.get('success'))

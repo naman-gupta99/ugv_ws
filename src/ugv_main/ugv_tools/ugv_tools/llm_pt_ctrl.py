@@ -30,7 +30,7 @@ PT_SETTLE_HOLD_S = 0.20
 PT_SETTLE_TIMEOUT_S = 4.0
 JOINT_FEEDBACK_TOPIC = os.environ.get("UGV_JOINT_FEEDBACK_TOPIC", "/joint_states")
 
-PLATFORM = "SIM"  # Change to "ROVER" when running on the actual rover
+PLATFORM = os.getenv("UGV_PLATFORM", os.getenv("PLATFORM", "SIM")).upper()
 TOPICS = {
     "SIM": {
         "image_raw": "/overhead_camera/image_raw",
@@ -41,6 +41,8 @@ TOPICS = {
         "joint_states": "/ugv/joint_states"
     }
 }
+if PLATFORM not in TOPICS:
+    raise ValueError(f"Unsupported UGV platform {PLATFORM!r}; expected one of {sorted(TOPICS)}")
 
 class LlmPtCtrl(Node):
 
