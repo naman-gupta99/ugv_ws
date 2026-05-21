@@ -33,6 +33,7 @@ setup(
             'inspection_pipeline = ugv_tools.inspection_pipeline:main',
             'run_inspection = ugv_tools.run_inspection:main',
             'ugv_model_smoke_test = ugv_tools.model_smoke_test:main',
+            'rear_left_motor_test = ugv_tools.rear_left_motor_test:main',
             'wheel_encoder_diagnostic = ugv_tools.wheel_encoder_diagnostic:main',
         ],
     },

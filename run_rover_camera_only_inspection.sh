@@ -57,6 +57,14 @@ echo "  model: ${UGV_AGENT_MODEL}"
 echo "  hint: ${UGV_AGENT_HINT:-<none>}"
 
 behavior_pid=""
+behavior_action_available() {
+  ros2 action list 2>/dev/null | grep -Fxq "/behavior"
+}
+
+existing_behavior_count() {
+  pgrep -af "ugv_tools.*behavior_ctrl|behavior_ctrl" 2>/dev/null | grep -v "grep" | wc -l
+}
+
 cleanup() {
   if [[ -n "${behavior_pid}" ]] && kill -0 "${behavior_pid}" 2>/dev/null; then
     kill "${behavior_pid}" 2>/dev/null || true
@@ -65,7 +73,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "${UGV_START_BEHAVIOR_CTRL:-true}" == "true" ]]; then
+behavior_count="$(existing_behavior_count | tr -d ' ')"
+if (( behavior_count > 1 )); then
+  echo "Found ${behavior_count} behavior_ctrl processes. Stop duplicates before running:" >&2
+  echo "  pkill -f 'ugv_tools.*behavior_ctrl|behavior_ctrl'" >&2
+  exit 1
+fi
+
+if (( behavior_count == 1 )) || behavior_action_available; then
+  echo "Using existing /behavior action server."
+elif [[ "${UGV_START_BEHAVIOR_CTRL:-true}" == "true" ]]; then
   echo "Starting behavior_ctrl action server..."
   ros2 run ugv_tools behavior_ctrl &
   behavior_pid="$!"
@@ -77,14 +94,14 @@ behavior_ready_timeout="${UGV_BEHAVIOR_READY_TIMEOUT:-15}"
 echo "Waiting up to ${behavior_ready_timeout}s for /behavior..."
 deadline=$((SECONDS + behavior_ready_timeout))
 while (( SECONDS < deadline )); do
-  if ros2 action list 2>/dev/null | grep -Fxq "/behavior"; then
+  if behavior_action_available; then
     echo "/behavior is available."
     break
   fi
   sleep 1
 done
 
-if ! ros2 action list 2>/dev/null | grep -Fxq "/behavior"; then
+if ! behavior_action_available; then
   echo "Timed out waiting for /behavior. Is behavior_ctrl running?" >&2
   exit 1
 fi

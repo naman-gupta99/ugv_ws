@@ -136,15 +136,13 @@ class BehaviorController(Node):
                 raise ValueError('command must be a JSON list')
         except Exception as exc:
             goal_handle.abort()
-            result.result = False
-            result.message = f'Invalid command payload: {exc}'
+            self._set_result(result, False, f'Invalid command payload: {exc}')
             return result
 
         for idx, json_data in enumerate(json_list):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
-                result.result = False
-                result.message = 'Goal canceled'
+                self._set_result(result, False, 'Goal canceled')
                 return result
 
             try:
@@ -152,15 +150,13 @@ class BehaviorController(Node):
                 data_value = json_data.get('data', 0.0)
             except Exception as exc:
                 goal_handle.abort()
-                result.result = False
-                result.message = f'Invalid command entry: {exc}'
+                self._set_result(result, False, f'Invalid command entry: {exc}')
                 return result
 
             ok, message = self.execute_behavior(goal_handle, command_type, data_value)
             if not ok:
                 goal_handle.abort()
-                result.result = False
-                result.message = message
+                self._set_result(result, False, message)
                 return result
 
             # Add a small inter-step delay so sequential commands have a deterministic handoff.
@@ -169,10 +165,16 @@ class BehaviorController(Node):
 
         goal_handle.succeed()
         result = Behavior.Result()
-        result.result = True
-        result.message = 'Behavior command sequence completed'
+        self._set_result(result, True, 'Behavior command sequence completed')
        
         return result
+
+    def _set_result(self, result, success, message=''):
+        result.result = bool(success)
+        if hasattr(result, 'message'):
+            result.message = message
+        elif message and not success:
+            self.get_logger().warn(message)
 
     def execute_behavior(self, goal_handle, command_type, data_value):
         try:
@@ -226,13 +228,20 @@ class BehaviorController(Node):
     def _publish_feedback(self, goal_handle, command_type, target_value, current_value, progress, is_settled):
         feedback = Behavior.Feedback()
         feedback.feedback = True
-        feedback.command_type = command_type
-        feedback.target_value = float(target_value)
-        feedback.current_value = float(current_value)
-        feedback.progress = max(0.0, min(1.0, float(progress)))
-        feedback.linear_velocity = float(self.linear_velocity)
-        feedback.angular_velocity = float(self.angular_velocity)
-        feedback.is_settled = bool(is_settled)
+        if hasattr(feedback, 'command_type'):
+            feedback.command_type = command_type
+        if hasattr(feedback, 'target_value'):
+            feedback.target_value = float(target_value)
+        if hasattr(feedback, 'current_value'):
+            feedback.current_value = float(current_value)
+        if hasattr(feedback, 'progress'):
+            feedback.progress = max(0.0, min(1.0, float(progress)))
+        if hasattr(feedback, 'linear_velocity'):
+            feedback.linear_velocity = float(self.linear_velocity)
+        if hasattr(feedback, 'angular_velocity'):
+            feedback.angular_velocity = float(self.angular_velocity)
+        if hasattr(feedback, 'is_settled'):
+            feedback.is_settled = bool(is_settled)
         goal_handle.publish_feedback(feedback)
 
     @staticmethod
