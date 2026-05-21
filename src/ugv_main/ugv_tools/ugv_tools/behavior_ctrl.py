@@ -26,6 +26,8 @@ g = "point_g"
 
 DEPTH_CLOSE_THRESHOLD_M = 0.30
 DEPTH_IMAGE_TOPIC = '/oak/stereo/image_raw'
+DRIVE_ON_HEADING_SPEED_M_S = 0.2
+BACK_UP_SPEED_M_S = 0.1
 
 class BehaviorController(Node):
     def __init__(self):
@@ -268,7 +270,7 @@ class BehaviorController(Node):
         # Drive the robot on a heading
         self.get_logger().info('Drive on heading')
         twist_msg = Twist()
-        twist_msg.linear.x = 0.2  
+        twist_msg.linear.x = DRIVE_ON_HEADING_SPEED_M_S
         twist_msg.angular.z = 0.0
         target_distance = abs(distance)
         if target_distance < 1e-6:
@@ -319,7 +321,7 @@ class BehaviorController(Node):
         # Back up the robot
         self.get_logger().info('Back up')
         twist_msg = Twist()
-        twist_msg.linear.x = -0.2  
+        twist_msg.linear.x = -BACK_UP_SPEED_M_S
         twist_msg.angular.z = 0.0
         target_distance = abs(distance)
         if target_distance < 1e-6:
@@ -486,4 +488,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

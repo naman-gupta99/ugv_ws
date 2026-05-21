@@ -72,7 +72,7 @@
     </scene>
     <gui fullscreen='0'>
       <camera name='user_camera'>
-        <pose>1.49217 -1.6626 10.5706 0 1.4178 -0.089048</pose>
+        <pose>1.84702 0.31855 10.5979 0 1.4178 -0.089048</pose>
         <view_controller>orbit</view_controller>
         <projection_type>perspective</projection_type>
       </camera>
@@ -2774,10 +2774,10 @@
       </link>
     </model>
     <state world_name='default'>
-      <sim_time>2294 865000000</sim_time>
-      <real_time>176 713152441</real_time>
-      <wall_time>1779335090 501647419</wall_time>
-      <iterations>175101</iterations>
+      <sim_time>2383 813000000</sim_time>
+      <real_time>89 450611386</real_time>
+      <wall_time>1779336061 327621186</wall_time>
+      <iterations>88948</iterations>
       <model name='cabinet'>
         <pose>4.639 4.31958 0 0 -0 0</pose>
         <scale>1 1 1</scale>
@@ -2809,10 +2809,10 @@
         </link>
       </model>
       <model name='digital_camo_double_decker_lunch_bag'>
-        <pose>4.15548 3.1754 0.000205 0 -0 0.370008</pose>
+        <pose>4.20011 3.86911 0.000205 0 -0 0.370008</pose>
         <scale>1.66211 1.66211 1.66211</scale>
         <link name='link_0'>
-          <pose>4.15548 3.1754 0.000205 0 -0 0.370008</pose>
+          <pose>4.20011 3.86911 0.000205 0 -0 0.370008</pose>
           <velocity>0 0 0 0 -0 0</velocity>
           <acceleration>0 0 0 0 -0 0</acceleration>
           <wrench>0 0 0 0 -0 0</wrench>

@@ -74,6 +74,7 @@ class DistanceCtrl(Node):
         self.create_subscription(JointState, '/joint_states', self._joint_cb, 10)
         self._behavior_client = ActionClient(self, Behavior, 'behavior')
         self._side_clearance_m = SIDE_CLEARANCE
+        self.inspection_distance_plan = []
 
         # Camera image
         self._image: RosImage | None = None
@@ -172,20 +173,28 @@ class DistanceCtrl(Node):
         """Median distance directly behind (180° ± FRONT_HALF_DEG)."""
         return self._sector_median(self._fresh_scan(), 180.0, FRONT_HALF_DEG)
 
-    def is_accessible(self):
-        """
-        Read one fresh scan and check both lateral clearances.
-
-        Accessible = left clearance (90° ± 10°) ≥ 1 m
-                   AND right clearance (−90° ± 10°) ≥ 1 m
-        Returns True/False; logs the measured clearances.
-        """
+    def _side_clearances(self):
+        """Read one fresh scan and return left/right lateral clearances."""
         scan = self._fresh_scan()
         lc = self._sector_median(scan,  90.0, SIDE_HALF_DEG)
         rc = self._sector_median(scan, -90.0, SIDE_HALF_DEG)
 
         if lc is None or rc is None:
             self.get_logger().warn('  Side sector returned no valid readings — marking inaccessible.')
+            return None, None
+
+        return lc, rc
+
+    def is_accessible(self):
+        """
+        Read one fresh scan and check both lateral clearances.
+
+        Accessible = left clearance (90° ± 10°) ≥ threshold
+                   AND right clearance (−90° ± 10°) ≥ threshold
+        Returns True/False; logs the measured clearances.
+        """
+        lc, rc = self._side_clearances()
+        if lc is None or rc is None:
             return False
 
         threshold = self._side_clearance_m
@@ -193,6 +202,108 @@ class DistanceCtrl(Node):
             f'    left: {lc:.2f} m   right: {rc:.2f} m   threshold: {threshold:.2f} m'
         )
         return lc >= threshold and rc >= threshold
+
+    def _covered_x_values(self, left_clearance: float, right_clearance: float) -> list[int]:
+        """Return target x columns reachable at one wall distance.
+
+        A non-zero x needs clearance on its movement side plus half a grid-cell
+        margin.  The center x=0 needs enough side clearance for the centered
+        camera footprint.
+        """
+        target = audit_state_instance.target_area
+        covered = []
+        for x in range(target['x_min'], target['x_max'] + 1):
+            required = abs(x) * X_M_PER_UNIT + X_M_PER_UNIT / 2.0
+            if x < 0:
+                ok = left_clearance >= required
+            elif x > 0:
+                ok = right_clearance >= required
+            else:
+                ok = min(left_clearance, right_clearance) >= required
+            if ok:
+                covered.append(x)
+        return covered
+
+    def _build_inspection_distance_plan(self, probe_records: list[dict]) -> list[dict]:
+        """Choose measured distances whose reachable x columns cover the target.
+
+        If a single distance covers all columns, keep the historical behavior:
+        choose the one closest to IDEAL_DISTANCE.  Otherwise greedily add the
+        probe that covers the most uncovered x columns, with closeness to
+        IDEAL_DISTANCE as the tie-breaker.
+        """
+        target = audit_state_instance.target_area
+        required_x = set(range(target['x_min'], target['x_max'] + 1))
+        candidates = [
+            {
+                'distance': record['distance'],
+                'x_values': self._covered_x_values(record['left'], record['right']),
+                'left': record['left'],
+                'right': record['right'],
+            }
+            for record in probe_records
+        ]
+        candidates = [candidate for candidate in candidates if candidate['x_values']]
+
+        full_candidates = [
+            candidate for candidate in candidates
+            if required_x.issubset(set(candidate['x_values']))
+        ]
+        if full_candidates:
+            best = min(full_candidates, key=lambda c: abs(c['distance'] - IDEAL_DISTANCE))
+            selected = [{
+                'distance': best['distance'],
+                'x_values': sorted(required_x),
+                'left': best['left'],
+                'right': best['right'],
+            }]
+        else:
+            uncovered = set(required_x)
+            selected = []
+            while uncovered:
+                useful = [
+                    candidate for candidate in candidates
+                    if uncovered & set(candidate['x_values'])
+                ]
+                if not useful:
+                    self.get_logger().warn(
+                        f'No probe can cover x columns: {sorted(uncovered)}'
+                    )
+                    return []
+
+                best = min(
+                    useful,
+                    key=lambda c: (
+                        -len(uncovered & set(c['x_values'])),
+                        abs(c['distance'] - IDEAL_DISTANCE),
+                    ),
+                )
+                assigned_x = sorted(uncovered & set(best['x_values']))
+                selected.append({
+                    'distance': best['distance'],
+                    'x_values': assigned_x,
+                    'left': best['left'],
+                    'right': best['right'],
+                })
+                uncovered -= set(assigned_x)
+
+        plan = []
+        for item in selected:
+            x_values = sorted(item['x_values'])
+            target_area = {
+                'x_min': min(x_values),
+                'x_max': max(x_values),
+                'y_min': target['y_min'],
+                'y_max': target['y_max'],
+            }
+            plan.append({
+                'distance': item['distance'],
+                'x_values': x_values,
+                'target_area': target_area,
+                'left_clearance': item['left'],
+                'right_clearance': item['right'],
+            })
+        return plan
 
     # ------------------------------------------------------------------
     # Pan-tilt camera helpers (same pattern as WallCenteringCtrl)
@@ -424,9 +535,7 @@ class DistanceCtrl(Node):
                 f'  grid target_area: {target_area}'
             )
 
-            audit_state_instance.target_area = target_area
-            audit_state_instance.remaining_coordinates = \
-                audit_state_instance._State__generate_goal_coordinates()
+            audit_state_instance.configure_target_area(target_area)
 
             self._set_pt_tilt(0.0)
             return target_area
@@ -649,7 +758,7 @@ class DistanceCtrl(Node):
             current_d = d
 
         # ── 4. Single-pass sweep — command 10 cm, record measured stops ─
-        accessible_positions = []   # wall distances where rover is accessible
+        probe_records = []          # measured distances plus side clearances
         _window_scan_done = False
         probe_count = 0
         max_probe_count = int(math.ceil((MAX_DISTANCE - MIN_DISTANCE) / PROBE_STEP)) + 10
@@ -680,11 +789,21 @@ class DistanceCtrl(Node):
                 _window_scan_done = True
 
             self.get_logger().info(f'Probing measured wall distance {probe_d:.2f} m ...')
-            if self.is_accessible():
-                accessible_positions.append(probe_d)
-                self.get_logger().info(f'  -> ACCESSIBLE recorded at measured {probe_d:.2f} m')
-            else:
+            lc, rc = self._side_clearances()
+            if lc is None or rc is None:
                 self.get_logger().info(f'  -> blocked recorded at measured {probe_d:.2f} m')
+            else:
+                probe_records.append({'distance': probe_d, 'left': lc, 'right': rc})
+                covered_x = self._covered_x_values(lc, rc)
+                self.get_logger().info(
+                    f'    left: {lc:.2f} m   right: {rc:.2f} m   '
+                    f'full-threshold: {self._side_clearance_m:.2f} m   '
+                    f'covered x: {covered_x or "none"}'
+                )
+                if lc >= self._side_clearance_m and rc >= self._side_clearance_m:
+                    self.get_logger().info(f'  -> full coverage possible at measured {probe_d:.2f} m')
+                else:
+                    self.get_logger().info(f'  -> partial coverage recorded at measured {probe_d:.2f} m')
 
             if probe_count >= max_probe_count:
                 self.get_logger().warn('Sweep probe limit reached — stopping.')
@@ -716,26 +835,27 @@ class DistanceCtrl(Node):
                 )
                 break
 
-        if not _window_scan_done and accessible_positions:
+        if not _window_scan_done and probe_records:
             self.get_logger().info(
                 'Window coordinate scan was not triggered by a boundary condition; '
                 'scanning from current measured position.'
             )
             self._scan_for_window_coords()
 
-        # ── 5. Select the accessible position closest to IDEAL_DISTANCE ─
-        if not accessible_positions:
+        # ── 5. Select distance combination that covers all target x columns ─
+        plan = self._build_inspection_distance_plan(probe_records)
+        self.inspection_distance_plan = plan
+        if not plan:
             self.get_logger().warn(
-                f'No accessible position found in [{MIN_DISTANCE}, {MAX_DISTANCE}] m. '
+                f'No distance combination found in [{MIN_DISTANCE}, {MAX_DISTANCE}] m. '
                 'Inspection cannot proceed.')
             return None
 
-        best_d = min(accessible_positions, key=lambda x: abs(x - IDEAL_DISTANCE))
+        best_d = plan[0]['distance']
         delta  = best_d - IDEAL_DISTANCE
         self.get_logger().info(
-            f'Best accessible distance: {best_d:.2f} m '
-            f'(Δ from ideal: {delta:+.2f} m)  '
-            f'[{len(accessible_positions)} accessible positions found]')
+            f'Inspection distance plan ({len(plan)} segment(s)); first distance {best_d:.2f} m '
+            f'(Δ from ideal: {delta:+.2f} m): {plan}')
 
         # ── 6. Move to the chosen position ───────────────────────────
         final = self._move_to_measured_distance(

@@ -48,8 +48,8 @@ FRONT_HALF_DEG      = 10.0
 # Horizontal field of view of the camera in degrees
 CAMERA_HFOV_DEG     = 80.0
 
-# Physical speed constants (must match behavior_ctrl.py)
-DRIVE_SPEED_M_S     = 0.2   # drive_on_heading / back_up speed
+# Physical speed constants (must match behavior_ctrl.py drive_on_heading speed)
+DRIVE_SPEED_M_S     = 0.2
 SPIN_90_SLEEP_S     = 12.0   # seconds to allow a 90° spin to complete
 
 # Pan-tilt vertical scan constants

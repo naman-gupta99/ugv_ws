@@ -29,6 +29,14 @@ class State:
         self.remaining_coordinates = self.__generate_goal_coordinates()
         self.path = [{"x": 0, "y": 0}]
 
+    def configure_target_area(self, target_area, reset_position=False):
+        """Set the active target rectangle and regenerate remaining goals."""
+        self.target_area = dict(target_area)
+        self.remaining_coordinates = self.__generate_goal_coordinates()
+        if reset_position:
+            self.current_coordinates = {"x": 0, "y": 0}
+            self.path = [{"x": 0, "y": 0}]
+
     def move_ahead(self):
         self.current_coordinates["y"] += 1
         self._update_coordinates()

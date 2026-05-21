@@ -31,7 +31,7 @@ import rclpy
 from rclpy.executors import SingleThreadedExecutor
 
 from .align_ctrl import AlignCtrl
-from .distance_ctrl import DistanceCtrl, audit_state_instance
+from .distance_ctrl import DistanceCtrl, POSITION_TOL, audit_state_instance
 from .llm_pt_ctrl import LlmPtCtrl
 from .nav_ctrl import NavCtrl
 from .wall_centering import WallCenteringCtrl
@@ -388,65 +388,169 @@ def _run_inspection_at_goal(goal: dict) -> dict:
         best = dist_node.find_accessible_distance()
         if best is None:
             dist_node.get_logger().error('No accessible distance found — continuing.')
-        return best
+            return None
+        return dist_node.inspection_distance_plan or [{
+            'distance': best,
+            'x_values': list(range(
+                audit_state_instance.target_area['x_min'],
+                audit_state_instance.target_area['x_max'] + 1,
+            )),
+            'target_area': dict(audit_state_instance.target_area),
+        }]
 
     try:
-        if _run_phase(dist_node, _find_distance, startup_delay=0.5) is None:
+        inspection_plan = _run_phase(dist_node, _find_distance, startup_delay=0.5)
+        if not inspection_plan:
             return goal_metrics
     finally:
         _record_phase_duration(goal_metrics, 5, phase_start)
     time.sleep(5.0)
 
     # ------------------------------------------------------------------
-    # Phase 6: Align parallel to wall
+    # Phase 6/7: Execute one LLM inspection run per planned distance slice.
     # ------------------------------------------------------------------
-    print(f'  [Phase 6] Aligning parallel to wall')
-    phase_start = time.monotonic()
-    align_node = AlignCtrl('parallel')
-    try:
-        if not _run_phase(align_node, align_node.align, startup_delay=1.0):
-            return goal_metrics
-    finally:
-        _record_phase_duration(goal_metrics, 6, phase_start)
-    time.sleep(10.0)
+    phase_6_total = 0.0
+    phase_7_total = 0.0
+    segment_metrics = []
+    capture_folders = []
+    total_pictures = 0
+    aggregate_langsmith = {
+        'prompt_tokens': 0,
+        'completion_tokens': 0,
+        'total_tokens': 0,
+        'prompt_cost': 0.0,
+        'completion_cost': 0.0,
+        'total_cost': 0.0,
+        'llm_runs': 0,
+        'error': '',
+    }
 
-    # ------------------------------------------------------------------
-    # Phase 7: LLM pan-tilt inspection (runs until agent finishes)
-    # ------------------------------------------------------------------
-    print(f'  [Phase 7] Running LLM inspection agent')
-    phase_7_start_monotonic = time.monotonic()
-    phase_7_start_dt = _utc_now()
-    pt_ctrl = LlmPtCtrl('llm_pt_ctrl')
-    goal_metrics['capture_folder'] = os.path.basename(pt_ctrl._run_dir)
-    executor = SingleThreadedExecutor()
-    executor.add_node(pt_ctrl)
-    try:
-        while pt_ctrl.validation_agent_thread.is_alive():
-            if pt_ctrl.motion_failed_event.is_set():
-                pt_ctrl.get_logger().warn(
-                    f'LLM inspection motion failed: {pt_ctrl.motion_failed_reason}. Aborting current goal.'
-                )
-                return goal_metrics
-            executor.spin_once(timeout_sec=0.1)
-    except KeyboardInterrupt:
-        raise
-    finally:
-        phase_7_end_dt = _utc_now()
-        _record_phase_duration(goal_metrics, 7, phase_7_start_monotonic)
-        goal_metrics['agent_metrics'] = pt_ctrl.validation_agent_metrics or {}
-        goal_metrics['llm_used'] = pt_ctrl.validation_agent_model_name or ''
-        goal_metrics['pictures_taken'] = pt_ctrl.pictures_taken
-        goal_metrics['langsmith_usage'] = _collect_langsmith_usage(
-            phase_7_start_dt,
-            phase_7_end_dt,
-            thread_id=pt_ctrl.validation_agent_thread_id,
+    for segment_index, segment in enumerate(inspection_plan):
+        distance = segment['distance']
+        target_area = segment['target_area']
+        x_values = segment.get('x_values') or list(range(target_area['x_min'], target_area['x_max'] + 1))
+        print(
+            f'  [Phase 6/7] Segment {segment_index + 1}/{len(inspection_plan)}: '
+            f'distance={distance:.2f} m, x={x_values}'
         )
-        executor.remove_node(pt_ctrl)
-        pt_ctrl.on_shutdown()
-        pt_ctrl.destroy_node()
 
-    if pt_ctrl.motion_failed_event.is_set():
-        return goal_metrics
+        if segment_index > 0:
+            print('  [Phase 6] Aligning perpendicular before distance change')
+            phase_start = time.monotonic()
+            align_node = AlignCtrl('perpendicular')
+            try:
+                if not _run_phase(align_node, align_node.align, startup_delay=1.0):
+                    return goal_metrics
+            finally:
+                phase_6_total += time.monotonic() - phase_start
+            time.sleep(2.0)
+
+            print(f'  [Phase 5] Moving to segment distance {distance:.2f} m')
+            phase_start = time.monotonic()
+            dist_node = DistanceCtrl()
+            try:
+                positioned = _run_phase(
+                    dist_node,
+                    lambda: dist_node._move_to_measured_distance(
+                        distance,
+                        POSITION_TOL,
+                        f'move to inspection segment {segment_index + 1}',
+                    ),
+                    startup_delay=0.5,
+                )
+                if positioned is None:
+                    goal_metrics['failure_reason'] = 'Failed to move to planned inspection distance.'
+                    return goal_metrics
+            finally:
+                goal_metrics['phase_durations_sec']['phase_5'] = round(
+                    goal_metrics['phase_durations_sec'].get('phase_5', 0.0)
+                    + (time.monotonic() - phase_start),
+                    3,
+                )
+            time.sleep(2.0)
+
+        print('  [Phase 6] Aligning parallel to wall')
+        phase_start = time.monotonic()
+        align_node = AlignCtrl('parallel')
+        try:
+            if not _run_phase(align_node, align_node.align, startup_delay=1.0):
+                return goal_metrics
+        finally:
+            phase_6_total += time.monotonic() - phase_start
+        time.sleep(5.0)
+
+        audit_state_instance.configure_target_area(target_area)
+
+        print('  [Phase 7] Running LLM inspection agent')
+        phase_7_start_monotonic = time.monotonic()
+        phase_7_start_dt = _utc_now()
+        pt_ctrl = LlmPtCtrl('llm_pt_ctrl')
+        capture_folder = os.path.basename(pt_ctrl._run_dir)
+        capture_folders.append(capture_folder)
+        executor = SingleThreadedExecutor()
+        executor.add_node(pt_ctrl)
+        try:
+            while pt_ctrl.validation_agent_thread.is_alive():
+                if pt_ctrl.motion_failed_event.is_set():
+                    pt_ctrl.get_logger().warn(
+                        f'LLM inspection motion failed: {pt_ctrl.motion_failed_reason}. Aborting current goal.'
+                    )
+                    return goal_metrics
+                executor.spin_once(timeout_sec=0.1)
+        except KeyboardInterrupt:
+            raise
+        finally:
+            phase_7_end_dt = _utc_now()
+            phase_7_total += time.monotonic() - phase_7_start_monotonic
+            langsmith_usage = _collect_langsmith_usage(
+                phase_7_start_dt,
+                phase_7_end_dt,
+                thread_id=pt_ctrl.validation_agent_thread_id,
+            )
+            for field in ('prompt_tokens', 'completion_tokens', 'total_tokens', 'llm_runs'):
+                aggregate_langsmith[field] += int(langsmith_usage.get(field) or 0)
+            for field in ('prompt_cost', 'completion_cost', 'total_cost'):
+                aggregate_langsmith[field] += float(langsmith_usage.get(field) or 0.0)
+            if langsmith_usage.get('error'):
+                aggregate_langsmith['error'] = (
+                    (aggregate_langsmith['error'] + '; ') if aggregate_langsmith['error'] else ''
+                ) + langsmith_usage['error']
+
+            segment_metrics.append({
+                'distance': distance,
+                'x_values': x_values,
+                'target_area': target_area,
+                'capture_folder': capture_folder,
+                'agent_metrics': pt_ctrl.validation_agent_metrics or {},
+                'llm_used': pt_ctrl.validation_agent_model_name or '',
+                'pictures_taken': pt_ctrl.pictures_taken,
+                'langsmith_usage': langsmith_usage,
+            })
+            goal_metrics['llm_used'] = pt_ctrl.validation_agent_model_name or goal_metrics['llm_used']
+            total_pictures += pt_ctrl.pictures_taken
+            executor.remove_node(pt_ctrl)
+            pt_ctrl.on_shutdown()
+            pt_ctrl.destroy_node()
+
+        if pt_ctrl.motion_failed_event.is_set():
+            return goal_metrics
+
+    goal_metrics['phase_durations_sec']['phase_6'] = round(phase_6_total, 3)
+    goal_metrics['phase_durations_sec']['phase_7'] = round(phase_7_total, 3)
+    goal_metrics['capture_folder'] = ';'.join(capture_folders)
+    goal_metrics['pictures_taken'] = total_pictures
+    goal_metrics['agent_metrics'] = {
+        'segments': segment_metrics,
+        'pictures_taken': total_pictures,
+        'missions_completed': int(all(
+            (segment.get('agent_metrics') or {}).get('missions_completed', 0)
+            for segment in segment_metrics
+        )),
+    }
+    aggregate_langsmith['prompt_cost'] = round(aggregate_langsmith['prompt_cost'], 8)
+    aggregate_langsmith['completion_cost'] = round(aggregate_langsmith['completion_cost'], 8)
+    aggregate_langsmith['total_cost'] = round(aggregate_langsmith['total_cost'], 8)
+    goal_metrics['langsmith_usage'] = aggregate_langsmith
 
     goal_metrics['success'] = True
     return goal_metrics
