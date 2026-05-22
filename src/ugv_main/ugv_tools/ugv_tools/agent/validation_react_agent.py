@@ -37,7 +37,7 @@ class ValidationReactAgent:
         
         hint_text = hints.get(hint, "") if hint else ""
         self.prompt = f"""
-        You are a rover navigation AI. Your mission is to visit **every integer grid point** inside the rectangular target area.
+        You are a rover navigation AI. Your mission is to visit **every integer grid point** on the rectangular target's perimeter.
         
         
 WORLD & GOAL:
