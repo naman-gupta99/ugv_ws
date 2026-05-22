@@ -373,6 +373,7 @@ class LlmPtCtrl(Node):
             self.get_logger().warn(
                 "No image_raw received yet, delaying image capture but publishing joint state."
             )
+        time.sleep(2)
 
     def _record_picture_taken(self):
         self.pictures_taken += 1
