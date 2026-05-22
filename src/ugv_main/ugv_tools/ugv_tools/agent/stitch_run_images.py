@@ -15,6 +15,7 @@ Default layout uses Cartesian view:
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 import statistics
@@ -42,6 +43,7 @@ class TileRecord:
     y: int
     iteration: int
     path: Path
+    wall_distance_m: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -73,23 +75,35 @@ class CameraIntrinsics:
     source: str
 
 
-def parse_tile_record(path: Path) -> Optional[TileRecord]:
+def parse_tile_record(
+    path: Path,
+    metadata_by_filename: Optional[Dict[str, dict]] = None,
+) -> Optional[TileRecord]:
     match = FILENAME_RE.match(path.name)
     if not match:
         return None
     x_str, y_str, iteration_str, _ext = match.groups()
-    return TileRecord(x=int(x_str), y=int(y_str), iteration=int(iteration_str), path=path)
+    metadata = (metadata_by_filename or {}).get(path.name, {})
+    wall_distance_m = metadata.get("wall_distance_m")
+    return TileRecord(
+        x=int(x_str),
+        y=int(y_str),
+        iteration=int(iteration_str),
+        path=path,
+        wall_distance_m=float(wall_distance_m) if wall_distance_m is not None else None,
+    )
 
 
 def collect_tile_records(run_dir: Path) -> Tuple[Dict[Tuple[int, int], TileRecord], List[Path], List[TileRecord]]:
     coord_to_record: Dict[Tuple[int, int], TileRecord] = {}
     skipped: List[Path] = []
     discarded: List[TileRecord] = []
+    metadata_by_filename = load_capture_metadata(run_dir)
 
     for path in sorted(run_dir.iterdir()):
         if not path.is_file():
             continue
-        parsed = parse_tile_record(path)
+        parsed = parse_tile_record(path, metadata_by_filename)
         if parsed is None:
             skipped.append(path)
             continue
@@ -104,6 +118,31 @@ def collect_tile_records(run_dir: Path) -> Tuple[Dict[Tuple[int, int], TileRecor
             discarded.append(parsed)
 
     return coord_to_record, skipped, discarded
+
+
+def load_capture_metadata(run_dir: Path) -> Dict[str, dict]:
+    metadata_path = run_dir / "capture_metadata.json"
+    if not metadata_path.exists():
+        return {}
+
+    try:
+        with metadata_path.open("r", encoding="utf-8") as infile:
+            metadata = json.load(infile)
+    except Exception:
+        return {}
+
+    images = metadata.get("images", [])
+    if not isinstance(images, list):
+        return {}
+
+    by_filename = {}
+    for image_record in images:
+        if not isinstance(image_record, dict):
+            continue
+        filename = image_record.get("filename")
+        if filename:
+            by_filename[filename] = image_record
+    return by_filename
 
 
 def read_tiles(coord_to_record: Dict[Tuple[int, int], TileRecord]) -> Tuple[Dict[Tuple[int, int], np.ndarray], Tuple[int, int, int]]:
@@ -733,11 +772,12 @@ def project_pixel_to_wall(
     x_m_per_unit: float,
     y_m_per_unit: float,
 ) -> Tuple[float, float]:
+    tile_wall_distance_m = record.wall_distance_m or wall_distance_m
     x_ray = (u - intrinsics.cx) / intrinsics.fx
     y_ray = -(v - intrinsics.cy) / intrinsics.fy
     z_ray = 1.0
 
-    tilt_rad = math.atan2(record.y * y_m_per_unit, wall_distance_m)
+    tilt_rad = math.atan2(record.y * y_m_per_unit, tile_wall_distance_m)
     cos_t = math.cos(tilt_rad)
     sin_t = math.sin(tilt_rad)
 
@@ -750,7 +790,7 @@ def project_pixel_to_wall(
             f"check tilt sign/model."
         )
 
-    scale = wall_distance_m / world_z_ray
+    scale = tile_wall_distance_m / world_z_ray
     wall_x = record.x * x_m_per_unit + scale * world_x_ray
     wall_y = scale * world_y_ray
     return wall_x, wall_y
@@ -787,7 +827,13 @@ def stitch_tiles_geometry(
         raise ValueError("Grid unit sizes must be positive")
 
     all_corners = [
-        geometry_tile_corners(record, intrinsics, wall_distance_m, x_m_per_unit, y_m_per_unit)
+        geometry_tile_corners(
+            record,
+            intrinsics,
+            wall_distance_m,
+            x_m_per_unit,
+            y_m_per_unit,
+        )
         for record in records.values()
     ]
     stacked = np.vstack(all_corners)
@@ -796,7 +842,14 @@ def stitch_tiles_geometry(
     min_y = float(np.min(stacked[:, 1]))
     max_y = float(np.max(stacked[:, 1]))
 
-    scale = float(px_per_meter) if px_per_meter is not None else intrinsics.fx / wall_distance_m
+    if px_per_meter is not None:
+        scale = float(px_per_meter)
+    else:
+        nearest_wall_distance_m = min(
+            record.wall_distance_m or wall_distance_m
+            for record in records.values()
+        )
+        scale = intrinsics.fx / nearest_wall_distance_m
     if scale <= 0:
         raise ValueError("--geometry-px-per-meter must be positive")
 
@@ -1065,9 +1118,16 @@ def main() -> int:
     if geometry_info is not None:
         intrinsics, geometry_scale, geometry_bounds = geometry_info
         min_wall_x, max_wall_x, min_wall_y, max_wall_y = geometry_bounds
+        metadata_distances = sorted({
+            round(record.wall_distance_m, 3)
+            for record in records.values()
+            if record.wall_distance_m is not None
+        })
         print(f"camera_intrinsics_source: {intrinsics.source}")
         print(f"camera_fx_fy_px: {intrinsics.fx:.3f}, {intrinsics.fy:.3f}")
         print(f"wall_distance_m: {args.wall_distance_m:.3f}")
+        if metadata_distances:
+            print(f"metadata_wall_distances_m: {metadata_distances}")
         print(f"geometry_px_per_meter: {geometry_scale:.3f}")
         print(
             "geometry_wall_bounds_m: "

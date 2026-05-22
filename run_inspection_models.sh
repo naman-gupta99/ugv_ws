@@ -14,17 +14,17 @@ fi
 export PYTHONPATH="${WORKSPACE_DIR}/src/ugv_main/ugv_tools:${PYTHONPATH:-}"
 
 RUNS=(
-#   "greedy|"
-#   "code-gemini-2.5-pro|easy"
-  "gemini-2.5-flash-lite|easy"
-#   "gemini-2.5-pro|easy"
+  "greedy|"
+  "code-gemini-2.5-pro|easy"
+#   "gemini-2.5-flash-lite|easy"
+  "gemini-2.5-pro|easy"
 )
 
 MODELS=(
-#   "greedy"
-#   "code-gemini-2.5-pro"
-  "gemini-2.5-flash-lite"
-#   "gemini-2.5-pro"
+  "greedy"
+  "code-gemini-2.5-pro"
+#   "gemini-2.5-flash-lite"
+  "gemini-2.5-pro"
 )
 
 echo "Testing ${#MODELS[@]} selected inspection model(s) before starting ROS runs..."

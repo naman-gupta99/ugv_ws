@@ -424,6 +424,37 @@ def _run_inspection_at_goal(goal: dict) -> dict:
         'llm_runs': 0,
         'error': '',
     }
+    multipart_capture = len(inspection_plan) > 1
+    capture_base_dir = os.environ.get("UGV_CAPTURE_DIR", "/home/ws/ugv_ws/captures")
+    if not os.path.isdir(os.path.dirname(capture_base_dir)):
+        capture_base_dir = os.path.expanduser("~/ugv_ws/captures")
+    run_ts = time.strftime("%Y%m%d%H%M%S")
+    run_suffix = "_multipart" if multipart_capture else ""
+    shared_run_dir = Path(capture_base_dir) / f"run_{run_ts}{run_suffix}"
+    shared_run_dir.mkdir(parents=True, exist_ok=True)
+    shared_metadata_path = shared_run_dir / "capture_metadata.json"
+    with shared_metadata_path.open("w", encoding="utf-8") as metadata_file:
+        json.dump(
+            {
+                "schema_version": 1,
+                "multipart": multipart_capture,
+                "inspection_plan": inspection_plan,
+                "segments": [
+                    {
+                        "segment_index": index,
+                        "multipart": multipart_capture,
+                        "distance": segment["distance"],
+                        "x_values": segment.get("x_values", []),
+                        "target_area": segment.get("target_area", {}),
+                    }
+                    for index, segment in enumerate(inspection_plan)
+                ],
+                "images": [],
+            },
+            metadata_file,
+            indent=2,
+            sort_keys=True,
+        )
 
     for segment_index, segment in enumerate(inspection_plan):
         distance = segment['distance']
@@ -479,14 +510,29 @@ def _run_inspection_at_goal(goal: dict) -> dict:
             phase_6_total += time.monotonic() - phase_start
         time.sleep(5.0)
 
-        audit_state_instance.configure_target_area(target_area)
+        audit_state_instance.configure_target_area(
+            target_area,
+            wall_distance_override_m=distance,
+            capture_segment={
+                "segment_index": segment_index,
+                "multipart": multipart_capture,
+                "distance": distance,
+                "x_values": x_values,
+                "target_area": target_area,
+            },
+        )
 
         print('  [Phase 7] Running LLM inspection agent')
         phase_7_start_monotonic = time.monotonic()
         phase_7_start_dt = _utc_now()
-        pt_ctrl = LlmPtCtrl('llm_pt_ctrl')
+        pt_ctrl = LlmPtCtrl(
+            'llm_pt_ctrl',
+            run_dir=shared_run_dir,
+            capture_metadata_path=shared_metadata_path,
+        )
         capture_folder = os.path.basename(pt_ctrl._run_dir)
-        capture_folders.append(capture_folder)
+        if capture_folder not in capture_folders:
+            capture_folders.append(capture_folder)
         executor = SingleThreadedExecutor()
         executor.add_node(pt_ctrl)
         try:
@@ -551,6 +597,8 @@ def _run_inspection_at_goal(goal: dict) -> dict:
     aggregate_langsmith['completion_cost'] = round(aggregate_langsmith['completion_cost'], 8)
     aggregate_langsmith['total_cost'] = round(aggregate_langsmith['total_cost'], 8)
     goal_metrics['langsmith_usage'] = aggregate_langsmith
+    audit_state_instance.wall_distance_override_m = None
+    audit_state_instance.capture_segment = None
 
     goal_metrics['success'] = True
     return goal_metrics

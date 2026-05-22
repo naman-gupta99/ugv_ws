@@ -6,7 +6,15 @@ X_M_PER_UNIT          =  1.1   # metres per llmptctrl grid unit (x axis)
 Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
 
 
-def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, current_angles):
+def convert_coordinates_to_angles(
+    curr_x,
+    curr_y,
+    new_x,
+    new_y,
+    laser_scan,
+    current_angles,
+    wall_distance_override_m=None,
+):
     """
     Convert pixel coordinates to pan-tilt angle differences in radians.
 
@@ -19,22 +27,23 @@ def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, curr
     Returns:
         tuple: (dx_rad, dy_rad) angles in radians.
     """
-    if laser_scan is None:
-        return current_angles
-
-    scan = process_scan_for_rover(laser_scan)
-    if scan is None:
-        return current_angles
-    
     if new_y == 0:
         return 0.0, 0.0
 
     dx, dy = new_x - curr_x, new_y - curr_y
     curr_x_rad, curr_y_rad = current_angles
 
-    dist_x = finite_range_at_angle(scan, -90.0)
-    dist_x_0 = finite_range_at_angle(scan, 0.0)
-    dist_x_90 = finite_range_at_angle(scan, 90.0)
+    if wall_distance_override_m is not None:
+        dist_x = float(wall_distance_override_m)
+    else:
+        if laser_scan is None:
+            return current_angles
+
+        scan = process_scan_for_rover(laser_scan)
+        if scan is None:
+            return current_angles
+
+        dist_x = finite_range_at_angle(scan, -90.0)
 
     # Guard against division by zero or invalid range metadata.
     dist_x = max(dist_x, 1e-6)

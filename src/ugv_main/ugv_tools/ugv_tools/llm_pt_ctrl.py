@@ -3,6 +3,7 @@
 
 import cv2
 from cv_bridge import CvBridge
+from datetime import datetime, timezone
 import math
 import rclpy
 from rclpy.node import Node
@@ -105,7 +106,7 @@ class LlmPtCtrl(Node):
     def get_current_angles(self):
         return 0.0, self.y_rad
 
-    def __init__(self, name):
+    def __init__(self, name, run_dir=None, capture_metadata_path=None):
         super().__init__(name)
         self.get_logger().info(
             f"LlmPtCtrl started with model={os.environ.get('UGV_AGENT_MODEL', Models.DEFAULT_MODEL)} "
@@ -176,8 +177,17 @@ class LlmPtCtrl(Node):
         else:
             self.capture_base_dir = home_fallback
 
-        run_ts = time.strftime("%Y%m%d%H%M%S")
-        self._run_dir = os.path.join(self.capture_base_dir, f"run_{run_ts}")
+        if run_dir is None:
+            run_ts = time.strftime("%Y%m%d%H%M%S")
+            self._run_dir = os.path.join(self.capture_base_dir, f"run_{run_ts}")
+        else:
+            self._run_dir = str(run_dir)
+        self._capture_metadata_path = (
+            str(capture_metadata_path)
+            if capture_metadata_path is not None
+            else os.path.join(self._run_dir, "capture_metadata.json")
+        )
+        self.curr = self._next_capture_index()
 
         # Timer to periodically call publish_joint_state
         # self.timer = self.create_timer(0.1, self.publish_joint_state)
@@ -197,6 +207,69 @@ class LlmPtCtrl(Node):
             target=self._run_validation_agent, daemon=True
         )
         self.validation_agent_thread.start()
+
+    def _next_capture_index(self):
+        run_dir = pathlib.Path(self._run_dir)
+        max_iteration = -1
+        if run_dir.exists():
+            for path in run_dir.iterdir():
+                stem_parts = path.stem.split("_")
+                if len(stem_parts) != 3:
+                    continue
+                try:
+                    max_iteration = max(max_iteration, int(stem_parts[2]))
+                except ValueError:
+                    continue
+        return max_iteration + 1
+
+    def _append_capture_metadata(self, filename):
+        metadata_path = pathlib.Path(self._capture_metadata_path)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        coord = audit_state_instance.current_coordinates
+        segment = audit_state_instance.capture_segment or {}
+        image_record = {
+            "filename": filename,
+            "x": coord["x"],
+            "y": coord["y"],
+            "iteration": self.curr,
+            "wall_distance_m": audit_state_instance.wall_distance_override_m,
+            "segment_index": segment.get("segment_index"),
+            "target_area": dict(audit_state_instance.target_area),
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if segment:
+            image_record["segment"] = dict(segment)
+
+        try:
+            is_multipart = bool(segment.get("multipart", False))
+            if metadata_path.exists():
+                with metadata_path.open("r", encoding="utf-8") as infile:
+                    metadata = json.load(infile)
+            else:
+                metadata = {
+                    "schema_version": 1,
+                    "multipart": is_multipart,
+                    "segments": [],
+                    "images": [],
+                }
+
+            metadata["multipart"] = bool(metadata.get("multipart") or is_multipart)
+            if segment:
+                segment_key = segment.get("segment_index")
+                existing = {
+                    item.get("segment_index")
+                    for item in metadata.get("segments", [])
+                }
+                if segment_key not in existing:
+                    metadata.setdefault("segments", []).append(dict(segment))
+            metadata.setdefault("images", []).append(image_record)
+
+            tmp_path = metadata_path.with_suffix(".json.tmp")
+            with tmp_path.open("w", encoding="utf-8") as outfile:
+                json.dump(metadata, outfile, indent=2, sort_keys=True)
+            tmp_path.replace(metadata_path)
+        except Exception as exc:
+            self.get_logger().warn(f"Failed to write capture metadata: {exc}")
 
     # Callback for image_raw
     def image_raw_callback(self, msg):
@@ -334,6 +407,7 @@ class LlmPtCtrl(Node):
                     self.get_logger().info(
                         f"Image saved successfully as {filename}"
                     )
+                    self._append_capture_metadata(fname)
                 else:
                     # cv2 can fail silently; log and fallback to temp
                     raise IOError("cv2.imwrite returned False")

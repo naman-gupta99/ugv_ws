@@ -28,11 +28,21 @@ class State:
         self.target_area = {"x_min": -1, "x_max": 1, "y_min": 2, "y_max": 3}
         self.remaining_coordinates = self.__generate_goal_coordinates()
         self.path = [{"x": 0, "y": 0}]
+        self.wall_distance_override_m = None
+        self.capture_segment = None
 
-    def configure_target_area(self, target_area, reset_position=False):
+    def configure_target_area(
+        self,
+        target_area,
+        reset_position=False,
+        wall_distance_override_m=None,
+        capture_segment=None,
+    ):
         """Set the active target rectangle and regenerate remaining goals."""
         self.target_area = dict(target_area)
         self.remaining_coordinates = self.__generate_goal_coordinates()
+        self.wall_distance_override_m = wall_distance_override_m
+        self.capture_segment = capture_segment
         if reset_position:
             self.current_coordinates = {"x": 0, "y": 0}
             self.path = [{"x": 0, "y": 0}]
@@ -65,6 +75,7 @@ class State:
             self.current_coordinates["y"],
             self.get_laser_scan_func(),
             self.get_current_angles_func(),
+            self.wall_distance_override_m,
         )
         if self.update_rover_state_func:
             try:
