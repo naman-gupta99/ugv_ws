@@ -1,0 +1,98 @@
+{
+  "images": [
+    {
+      "captured_at": "2026-05-21T21:24:00.004686+00:00",
+      "filename": "x-1_y1_0.png",
+      "iteration": 0,
+      "segment": {
+        "distance": 1.2272014021873474,
+        "multipart": true,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 0,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1,
+          0
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 0,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.2272014021873474,
+      "x": -1,
+      "y": 1
+    }
+  ],
+  "inspection_plan": [
+    {
+      "distance": 1.2272014021873474,
+      "left_clearance": 2.2832188606262207,
+      "right_clearance": 0.7607086002826691,
+      "target_area": {
+        "x_max": 0,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        -1,
+        0
+      ]
+    },
+    {
+      "distance": 1.8457581996917725,
+      "left_clearance": 0.49043233692646027,
+      "right_clearance": 2.740069627761841,
+      "target_area": {
+        "x_max": 1,
+        "x_min": 1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        1
+      ]
+    }
+  ],
+  "multipart": true,
+  "schema_version": 1,
+  "segments": [
+    {
+      "distance": 1.2272014021873474,
+      "multipart": true,
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 0,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        -1,
+        0
+      ]
+    },
+    {
+      "distance": 1.8457581996917725,
+      "multipart": true,
+      "segment_index": 1,
+      "target_area": {
+        "x_max": 1,
+        "x_min": 1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        1
+      ]
+    }
+  ]
+}

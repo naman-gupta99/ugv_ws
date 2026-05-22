@@ -2,8 +2,8 @@ import math
 
 from ...lidar_scan_utils import finite_range_at_angle, process_scan_for_rover
 
-X_M_PER_UNIT          =  1.1   # metres per llmptctrl grid unit (x axis)
-Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
+X_M_PER_UNIT          =  0.6   # metres per llmptctrl grid unit (x axis)
+Y_M_PER_UNIT          =  0.4   # metres per llmptctrl grid unit (y axis)
 
 
 def convert_coordinates_to_angles(curr_x, curr_y, new_x, new_y, laser_scan, current_angles):

@@ -1,0 +1,67 @@
+{
+  "images": [
+    {
+      "captured_at": "2026-05-21T20:24:50.843821+00:00",
+      "filename": "x-1_y0_0.png",
+      "iteration": 0,
+      "segment_index": null,
+      "target_area": {
+        "x_max": 1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": null,
+      "x": -1,
+      "y": 0
+    },
+    {
+      "captured_at": "2026-05-21T20:24:54.928951+00:00",
+      "filename": "x-1_y1_1.png",
+      "iteration": 1,
+      "segment_index": null,
+      "target_area": {
+        "x_max": 1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": null,
+      "x": -1,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:25:07.092902+00:00",
+      "filename": "x0_y1_2.png",
+      "iteration": 2,
+      "segment_index": null,
+      "target_area": {
+        "x_max": 1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": null,
+      "x": 0,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:25:11.197687+00:00",
+      "filename": "x0_y0_3.png",
+      "iteration": 3,
+      "segment_index": null,
+      "target_area": {
+        "x_max": 1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": null,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "multipart": false,
+  "schema_version": 1,
+  "segments": []
+}

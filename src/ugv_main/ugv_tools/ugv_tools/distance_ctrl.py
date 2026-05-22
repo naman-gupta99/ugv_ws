@@ -52,8 +52,8 @@ PT_SETTLE_HOLD_S      =  0.20
 PT_SETTLE_TIMEOUT_S   =  3.0
 WINDOW_MIN_CONFIDENCE =  0.70
 EDGE_MARGIN_PX        =  20    # px clearance on all sides = "fully visible"
-X_M_PER_UNIT          =  1.2   # metres per llmptctrl grid unit (x axis)
-Y_M_PER_UNIT          =  0.9   # metres per llmptctrl grid unit (y axis)
+X_M_PER_UNIT          =  0.6   # metres per llmptctrl grid unit (x axis)
+Y_M_PER_UNIT          =  0.4   # metres per llmptctrl grid unit (y axis)
 
 
 class DistanceCtrl(Node):

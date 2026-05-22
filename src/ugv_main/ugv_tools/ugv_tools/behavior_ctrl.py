@@ -27,7 +27,7 @@ g = "point_g"
 DEPTH_CLOSE_THRESHOLD_M = 0.30
 DEPTH_IMAGE_TOPIC = '/oak/stereo/image_raw'
 DRIVE_ON_HEADING_SPEED_M_S = 0.2
-BACK_UP_SPEED_M_S = 0.1
+BACK_UP_SPEED_M_S = 0.2
 
 class BehaviorController(Node):
     def __init__(self):

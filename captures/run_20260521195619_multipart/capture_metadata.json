@@ -1,0 +1,358 @@
+{
+  "images": [
+    {
+      "captured_at": "2026-05-21T19:57:03.558978+00:00",
+      "filename": "x0_y1_0.png",
+      "iteration": 0,
+      "segment": {
+        "distance": 0.7585548162460327,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 2,
+          "x_min": 0,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 0.7585548162460327,
+      "x": 0,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T19:57:15.507399+00:00",
+      "filename": "x1_y1_1.png",
+      "iteration": 1,
+      "segment": {
+        "distance": 0.7585548162460327,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 2,
+          "x_min": 0,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 0.7585548162460327,
+      "x": 1,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T19:57:19.634034+00:00",
+      "filename": "x1_y0_2.png",
+      "iteration": 2,
+      "segment": {
+        "distance": 0.7585548162460327,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 2,
+          "x_min": 0,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 0.7585548162460327,
+      "x": 1,
+      "y": 0
+    },
+    {
+      "captured_at": "2026-05-21T19:57:31.647394+00:00",
+      "filename": "x2_y0_3.png",
+      "iteration": 3,
+      "segment": {
+        "distance": 0.7585548162460327,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 2,
+          "x_min": 0,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 0.7585548162460327,
+      "x": 2,
+      "y": 0
+    },
+    {
+      "captured_at": "2026-05-21T19:57:35.787324+00:00",
+      "filename": "x2_y1_4.png",
+      "iteration": 4,
+      "segment": {
+        "distance": 0.7585548162460327,
+        "segment_index": 0,
+        "target_area": {
+          "x_max": 2,
+          "x_min": 0,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          0,
+          1,
+          2
+        ]
+      },
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 0.7585548162460327,
+      "x": 2,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:00:12.270892+00:00",
+      "filename": "x1_y1_5.png",
+      "iteration": 5,
+      "segment": {
+        "distance": 1.222737193107605,
+        "segment_index": 1,
+        "target_area": {
+          "x_max": -1,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1
+        ]
+      },
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.222737193107605,
+      "x": 1,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:00:21.203215+00:00",
+      "filename": "x0_y1_6.png",
+      "iteration": 6,
+      "segment": {
+        "distance": 1.222737193107605,
+        "segment_index": 1,
+        "target_area": {
+          "x_max": -1,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1
+        ]
+      },
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.222737193107605,
+      "x": 0,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:00:29.959460+00:00",
+      "filename": "x-1_y1_7.png",
+      "iteration": 7,
+      "segment": {
+        "distance": 1.222737193107605,
+        "segment_index": 1,
+        "target_area": {
+          "x_max": -1,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1
+        ]
+      },
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.222737193107605,
+      "x": -1,
+      "y": 1
+    },
+    {
+      "captured_at": "2026-05-21T20:00:34.033397+00:00",
+      "filename": "x-1_y0_8.png",
+      "iteration": 8,
+      "segment": {
+        "distance": 1.222737193107605,
+        "segment_index": 1,
+        "target_area": {
+          "x_max": -1,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1
+        ]
+      },
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.222737193107605,
+      "x": -1,
+      "y": 0
+    },
+    {
+      "captured_at": "2026-05-21T20:00:38.155305+00:00",
+      "filename": "x-1_y1_9.png",
+      "iteration": 9,
+      "segment": {
+        "distance": 1.222737193107605,
+        "segment_index": 1,
+        "target_area": {
+          "x_max": -1,
+          "x_min": -1,
+          "y_max": 1,
+          "y_min": 0
+        },
+        "x_values": [
+          -1
+        ]
+      },
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "wall_distance_m": 1.222737193107605,
+      "x": -1,
+      "y": 1
+    }
+  ],
+  "inspection_plan": [
+    {
+      "distance": 0.7585548162460327,
+      "left_clearance": 0.9282601177692413,
+      "right_clearance": 3.086402654647827,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "distance": 1.222737193107605,
+      "left_clearance": 2.510548710823059,
+      "right_clearance": 1.136947214603424,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        -1
+      ]
+    }
+  ],
+  "multipart": true,
+  "schema_version": 1,
+  "segments": [
+    {
+      "distance": 0.7585548162460327,
+      "segment_index": 0,
+      "target_area": {
+        "x_max": 2,
+        "x_min": 0,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "distance": 1.222737193107605,
+      "segment_index": 1,
+      "target_area": {
+        "x_max": -1,
+        "x_min": -1,
+        "y_max": 1,
+        "y_min": 0
+      },
+      "x_values": [
+        -1
+      ]
+    }
+  ]
+}
